@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+	<title>Trialstreamer status</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
+	<body class="sans-serif">
+		<h1>Trialstreamer status</h1>
+
+		<h2>Most recent downloads</h2>
+
+		<table>
+			<tr class="tl"><th>Update type</th><th>Source date</th><th>Download date</th><th>Time since update</th></tr>
+        	{% for r in results %}
+        		<tr><td>{{r['update_type']}}</td><td>{{r['source_date']}}</td><td>{{r['download_date']}}</td><td>{{r['age']}}</td>
+        	{% endfor %}
+		</table>
+	</body>
+</html>

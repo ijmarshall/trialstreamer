@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
+
+</head>
+	<title>Trialstreamer RCTs</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
+	<body class="sans-serif">
+		<h1>Trialstreamer RCTs status</h1>
+
+		<h2></h2>
+
+		<table>
+			<tr class="tl"><th>Threshold type</th><th>Number</th></tr>
+        	{% for r in totals %}
+        		<tr><td>{{r['threshold_type']}}</td><td>{{r['count']}}
+        	{% endfor %}
+		</table>
+		<p>
+			{{breakdowns}}
+		</p>
+
+
+
+<!-- <canvas id="myChart"></canvas> -->
+<div>
+<canvas id="myChart" width='500px' height='400px'></canvas>
+</div>
+<script>
+var ctx = document.getElementById("myChart").getContext('2d');
+var myChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{labels|safe}},
+        datasets: {{datasets|safe}}
+    },
+    options: {
+    	responsive:false,
+		maintainAspectRatio: false,
+        scales: {
+            yAxes: [{
+                ticks: {
+                    beginAtZero:true
+                }
+            }]
+        }
+    }
+});
+</script>
+
+	</body>
+</html>
