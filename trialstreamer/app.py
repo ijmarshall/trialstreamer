@@ -47,10 +47,9 @@ def rcts():
     # select count(*) from pubmed where pm_data @> '{"ptyp": ["Randomized Controlled Trial"]}';
 
 
-    threshold_types = ["precise", "balanced", "sensitive"]
-    threshold_colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628']
-    threshold_fills = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd']
-    threshold_shapes = ['circle', 'star', 'triangle', 'line', 'crossRot','circle', 'circle']
+    threshold_types = ["precise"]#, "balanced", "sensitive"]
+    #threshold_colors = ["#004c6d", "#6996b3", "#c1e7ff", "#ffa600", "#ff6361"]
+    threshold_colors = ["#004c6d", "#ffa600"]
 
     global clf_cutoffs
 
@@ -73,18 +72,20 @@ def rcts():
         for r in records:
             breakdowns[r['year']][t] = r['count']
 
-        cur.execute("select year, count(*) from pubmed where (clf_type='svm_cnn' and is_rct_{}=true) group by year;".format(t))
-        records = cur.fetchall()
-        for r in records:
-            breakdowns[r['year']]["{} no ptyp".format(t)] = r['count']
+#        cur.execute("select year, count(*) from pubmed where (clf_type='svm_cnn' and is_rct_{}=true) group by year;".format(t))
+#        records = cur.fetchall()
+#        for r in records:
+#            breakdowns[r['year']]["{} no ptyp".format(t)] = r['count']
+#
 
-    
     cur.execute("select count(*), year from pubmed where ptyp_rct=1 group by year;")
     records = cur.fetchall()
+    pt_total = 0
     for r in records:
         breakdowns[r['year']]["PubMed PT tag"] = r['count']
+        pt_total += r['count']
+    totals.append({"count": pt_total, "threshold_type": "PubMed PT tag"})
 
-    
     cur.execute("select count(*), year from ictrp group by year;")
     records = cur.fetchall()
     for r in records:
@@ -99,17 +100,16 @@ def rcts():
     # breakdowns_ptyp.pop('')
     # breakdowns_ptyp.pop(None)
 
-    
-    year_labels = sorted(breakdowns.keys())
+
+    year_labels = [y for y in sorted(breakdowns.keys()) if int("0"+y) >= 1985 and int("0"+y) <=2017]
     datasets = []
 
-    print(year_labels)
 
-    for t, tc, ts, tf in zip(threshold_types + ["{} no ptyp".format(t) for t in threshold_types] + ["PubMed PT tag", "Trial registries"], threshold_colors, threshold_shapes, threshold_fills):
-        print(t)
-        datasets.append({"label": t, "data": [breakdowns[y].get(t, 0) for y in year_labels], "fill": False, "borderColor": tc, "pointStyle": ts, "borderWidth": 2, "backgroundColor": tf})
+    for tl, t, tc in zip(['RobotReviewer ML classifier', 'Manual PubMed PT tag'], threshold_types + ["PubMed PT tag"], threshold_colors):
+        datasets.append({"label": tl, "data": [breakdowns[y].get(t, 0) for y in year_labels], "fill": False, "borderColor": tc, "borderWidth": 2})
 
-
+    # format year labels
+    year_labels = [y if int(y) % 2 else "" for y in year_labels]
     cur.close()
     return render_template('rcts.html', totals=totals, labels=json.dumps(year_labels), datasets=json.dumps(datasets))
 
