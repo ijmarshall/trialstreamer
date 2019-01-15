@@ -92,7 +92,7 @@ def rcts():
         breakdowns[r['year']]["Trial registries"] = r['count']
 
 
-    breakdowns.pop('')
+    # breakdowns.pop('')
     breakdowns.pop(None)
 
     # for now remove blank years, but there are a few thousand in that group

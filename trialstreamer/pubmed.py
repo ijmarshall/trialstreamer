@@ -71,7 +71,7 @@ def already_done_clfs():
     fns =  glob.glob(os.path.join(config.PUBMED_LOCAL_CLASSIFICATIONS_PATH, '*.json'))
     return set([os.path.basename(r) for r in fns])
 
-def download_ftp_baseline():
+def download_ftp_baseline(force_update=False):
     """
     Grab all the latest baseline files (checking if already done first)
 
@@ -96,11 +96,11 @@ def download_ftp_baseline():
     download_and_validate_gzs(baseline_ftp_fns)
     download_date = datetime.datetime.now()
     log.info("Uploading to postgres")
-    upload_to_postgres(baseline_ftp_fns, safety_test_parse, force_update=False)
+    upload_to_postgres(baseline_ftp_fns, safety_test_parse, force_update=force_update)
     log.info("Uploaded!")
     dbutil.log_update(update_type='pubmed_baseline', source_filename=os.path.basename(baseline_ftp_fns[0])[:8], source_date=get_date_from_fn(baseline_ftp_fns[0]), download_date=download_date)
-    log.info("Retrieving ptyp info")
-    add_ptyp()
+    # log.info("Retrieving ptyp info")
+    # add_ptyp()
 
 def download_md5s(gz_fns):
     """
@@ -295,11 +295,11 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=500, force_update=
 
     log.info(str(stats))
 
-def add_ptyp():
-    cur = dbutil. db.cursor()
-    cur.execute("update pubmed set ptyp_rct=(pm_data @> '{\"ptyp\": [\"Randomized Controlled Trial\"]}');")
-    cur.close()
-    dbutil.db.commit()
+# def add_ptyp():
+#     cur = dbutil. db.cursor()
+#     cur.execute("update pubmed set ptyp_rct=(pm_data @> '{\"ptyp\": [\"Randomized Controlled Trial\"]}');")
+#     cur.close()
+#     dbutil.db.commit()
     
 
 
