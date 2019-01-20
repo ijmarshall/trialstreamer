@@ -25,6 +25,7 @@ def make_tables():
             ab text,
             pm_data jsonb,
             ptyp_rct smallint,
+            indexing_method varchar(16),
             is_rct_precise boolean,
             is_rct_balanced boolean,
             is_rct_sensitive boolean,
@@ -49,7 +50,17 @@ create table if not exists update_log (
             source_filename varchar(256),
             source_date timestamp,
             download_date timestamp
-            );            """)
+            );
+
+create table if not exists pubmed_excludes (
+            id serial primary key,
+            pmid varchar(16),
+            year varchar(8),
+            ptyp_rct smallint,
+            clf_type varchar(16),
+            clf_score real
+            );
+""")
 	cur = db.cursor()
 	cur.execute(create_tables_command)
 	cur.close()

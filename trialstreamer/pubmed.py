@@ -122,9 +122,9 @@ def download_and_validate_gzs(gz_fns):
     """
     already_done = already_done_gzs()
 
-    for i, gz_fn in enumerate(tqdm.tqdm(gz_fns, desc='md5 hashes downloaded from PubMed FTP server')):
+    for i, gz_fn in enumerate(tqdm.tqdm(gz_fns, desc='data files downloaded from PubMed FTP server')):
         if os.path.basename(gz_fn) in already_done:
-            # skip the already downloaded hashes
+            # skip the already downloaded files
             continue
         out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
 
@@ -136,7 +136,9 @@ def download_and_validate_gzs(gz_fns):
         with open(out_filename + ".md5", 'wb') as f:
             ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
 
-        validate_file(gz_fn, gz_fn + ".md5", raise_for_errors=True)
+        print(out_filename)
+
+        validate_file(out_filename, out_filename + ".md5", raise_for_errors=True)
 
 
 def validate_downloaded_data(fns):
@@ -278,6 +280,11 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=500, force_update=
                 if not pred["is_rct_sensitive"]:
                     # ignore anything that isn't an RCT by sensitive criteria at this stage
                     stats["articles excluded"] += 1
+                    row = (entry['pmid'], entry['year'], pred['ptyp_rct'], pred['clf_type'], pred['clf_score'])
+                    cur = dbutil. db.cursor()
+                    cur.execute("INSERT INTO pubmed_excludes (pmid, year, ptyp_rct, clf_type, clf_score) VALUES (%s, %s, %s, %s, %s);", row)
+                    cur.close()
+                    dbutil.db.commit()
                     continue
 
                 stats["articles included"] += 1
