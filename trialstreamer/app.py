@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, send_file
 from flask import request
 from trialstreamer import dbutil
 import trialstreamer
@@ -9,10 +9,13 @@ import json
 import psycopg2
 from collections import defaultdict
 from flask import jsonify
+from io import BytesIO as StringIO # py3
 
 app = Flask(__name__)
 
 
+with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
+    clf_cutoffs = json.load(f)
 
 
 @app.route('/')
@@ -25,7 +28,7 @@ def status():
     """
     Retrieves most recent update dates
     """
-    update_types = ["ictrp", "pubmed_baseline", "pubmed-daily"]
+    update_types = ["ictrp", "pubmed_baseline", "pubmed_update"]
 
     out = []
 
@@ -47,9 +50,10 @@ def rcts():
     # select count(*) from pubmed where pm_data @> '{"ptyp": ["Randomized Controlled Trial"]}';
 
 
-    threshold_types = ["precise"]#, "balanced", "sensitive"]
-    #threshold_colors = ["#004c6d", "#6996b3", "#c1e7ff", "#ffa600", "#ff6361"]
-    threshold_colors = ["#004c6d", "#ffa600"]
+    threshold_types = ["precise", "balanced", "sensitive"]
+    threshold_colors = ["#004c6d", "#6996b3", "#c1e7ff", "#ffa600", "#ff6361"]
+
+    #threshold_colors = ["#004c6d", "#ffa600"]
 
     global clf_cutoffs
 
@@ -71,6 +75,13 @@ def rcts():
         records = cur.fetchall()
         for r in records:
             breakdowns[r['year']][t] = r['count']
+
+    # # add all non-ptyp estimates
+    # cur.execute("select year, count(*) from pubmed where score_svm_cnn>={} group by year;".format(clf_cutoffs['thresholds']['svm_cnn']['precise']))
+    # records = cur.fetchall()
+    # for r in records:
+    #     breakdowns[r['year']]['non_ptyp'] = r['count']
+
 
 #        cur.execute("select year, count(*) from pubmed where (clf_type='svm_cnn' and is_rct_{}=true) group by year;".format(t))
 #        records = cur.fetchall()
@@ -101,15 +112,17 @@ def rcts():
     # breakdowns_ptyp.pop(None)
 
 
-    year_labels = [y for y in sorted(breakdowns.keys()) if int("0"+y) >= 1985 and int("0"+y) <=2017]
+    year_labels = [y for y in sorted(breakdowns.keys()) if int("0"+y) >= 1950 and int("0"+y) <=2019]
     datasets = []
 
+    hide_on_load = [False, True, True, False, True, True]
 
-    for tl, t, tc in zip(['RobotReviewer ML classifier', 'Manual PubMed PT tag'], threshold_types + ["PubMed PT tag"], threshold_colors):
-        datasets.append({"label": tl, "data": [breakdowns[y].get(t, 0) for y in year_labels], "fill": False, "borderColor": tc, "borderWidth": 2})
+
+    for tl, t, tc, hl in zip(['RobotReviewer ML classifier (precise)', 'RobotReviewer ML classifier (balanced)', 'RobotReviewer ML classifier (sensitive)',  'PubMed PT tag', 'Trial registries'], threshold_types + ["PubMed PT tag", 'Trial registries'], threshold_colors, hide_on_load):
+        datasets.append({"label": tl, "hidden": hl, "data": [breakdowns[y].get(t, 0) for y in year_labels], "fill": False, "borderColor": tc, "borderWidth": 2})
 
     # format year labels
-    year_labels = [y if int(y) % 2 else "" for y in year_labels]
+    year_labels = [y if (int(y) % 2) == 0 else "" for y in year_labels]
     cur.close()
     return render_template('rcts.html', totals=totals, labels=json.dumps(year_labels), datasets=json.dumps(datasets))
 
@@ -126,7 +139,25 @@ def db_dump():
     TODO figure out whether to do as a pgdump, or as
     a custom standardised data format
     """
-    return 'db_dump placeholder'
+    cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("SELECT pmid FROM pubmed WHERE is_rct_precise=true;")
+    records = cur.fetchall()
+    pmids = [r['pmid'] for r in records]
+    report = json.dumps(pmids)
+    strIO = StringIO()
+    strIO.write(report.encode('utf-8')) # need to send as a bytestring
+    strIO.seek(0)
+    return send_file(strIO,
+                     attachment_filename="rct_pmids.json",
+                     as_attachment=True)
+
+
+def pmquery_to_postgres(s):
+    s = s.replace(' and ', ' & ')
+    s = s.replace(' AND ', ' & ')
+    s = s.replace(' or ', ' | ')
+    s = s.replace(' OR ', ' | ')
+    return s
 
 @app.route('/query')
 def query():
@@ -134,17 +165,17 @@ def query():
     emulated PubMed-style boolean query
     """
     # still to improve!!
-    # currently searches ti/ab text only, using default text search
-    # no indexes yet
 
     q = request.args.get('q', '')
+    q = pmquery_to_postgres(q)
+
+
     threshold_type = request.args.get('threshold_type', 'balanced')
     start = int(request.args.get('start', 0))
     end = int(request.args.get('end', start+10))
     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT pm_data FROM pubmed WHERE (to_tsvector(ti || '  ' || ab) @@ to_tsquery(%s)) limit %s offset %s;", (q, end-start, int(start)))
+    cur.execute("SELECT pm_data FROM pubmed WHERE ti_vec @@ to_tsquery(%s) limit %s offset %s;", (q, end-start, int(start)))
     records = cur.fetchall()
-
     return jsonify(records)
 
 

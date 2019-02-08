@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import datetime
+from dateutil import parser
 import hashlib
 import tqdm
 import xml.etree.cElementTree as ET
@@ -24,6 +25,7 @@ import psycopg2
 import collections
 from itertools import zip_longest
 from robotsearch.robots import rct_robot
+from psycopg2.extras import execute_values
 
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
@@ -50,18 +52,42 @@ def get_baseline_fns():
     baseline_fns = [f for f in filelist if f.endswith('.gz')]
     return baseline_fns
 
-def already_done_md5s():
+def get_daily_update_fns():
+    ftp = get_ftp()
+    filelist = ftp.nlst('pubmed/updatefiles/')
+    update_fns = [f for f in filelist if f.endswith('.gz')]
+    update_fns.sort() # since we want to process these in order
+    return update_fns
+
+def get_daily_update_mod_times(update_fns):
+    ftp = get_ftp()
+    out = {}
+    for fn in update_fns:
+        out[os.path.basename(fn)] = parser.parse(ftp.sendcmd('MDTM {}'.format(fn))[4:].strip())
+    return out
+
+
+def already_done_md5s(updates=False):
     """
     glob which md5s already downloaded
     """
-    fns = glob.glob(os.path.join(config.PUBMED_LOCAL_DATA_PATH, '*.md5'))
+    if updates:
+        pth = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', '*.md5')
+    else:
+        pth = os.path.join(config.PUBMED_LOCAL_DATA_PATH, '*.md5')
+    fns = glob.glob(pth)
     return set([os.path.basename(r) for r in fns])
 
-def already_done_gzs():
+def already_done_gzs(updates=False):
     """
     glob which gzipped data files already downloaded
     """
-    fns =  glob.glob(os.path.join(config.PUBMED_LOCAL_DATA_PATH, '*.gz'))
+    if updates:
+        pth = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', '*.gz')
+    else:
+        pth = os.path.join(config.PUBMED_LOCAL_DATA_PATH, '*.gz')
+
+    fns =  glob.glob(pth)
     return set([os.path.basename(r) for r in fns])
 
 def already_done_clfs():
@@ -71,6 +97,46 @@ def already_done_clfs():
     fns =  glob.glob(os.path.join(config.PUBMED_LOCAL_CLASSIFICATIONS_PATH, '*.json'))
     return set([os.path.basename(r) for r in fns])
 
+def already_done_updates():
+    cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("SELECT source_filename FROM update_log WHERE update_type='pubmed_update';")
+    already_done_files = set((r['source_filename'] for r in cur.fetchall()))
+    return already_done_files
+
+def download_ftp_updates(safety_test_parse=True):
+    """
+    Grab the updates
+
+    """
+    if not dbutil.last_update(update_type='pubmed_baseline'):
+        log.warning("No baseline files in database; stopping. Run download_ftp_baseline() before updates")
+        return None
+
+    # download all available update files
+
+    update_ftp_fns = get_daily_update_fns()
+    update_ftp_mod_times = get_daily_update_mod_times(update_ftp_fns)
+    log.info("{} PubMed title/abstract update files on FTP server".format(len(update_ftp_fns)))
+    log.info("Checking hashfiles, and downloading any missing")
+
+    already_done_fns = already_done_gzs(updates=True)
+
+    log.info("Verifying local gzipped data files")
+    validate_downloaded_data(already_done_fns, updates=True)
+    log.info("Data validated")
+
+    log.info("Checking hashfiles, and downloading any missing")
+
+    download_md5s(update_ftp_fns, updates=True)
+    download_and_validate_gzs(update_ftp_fns, updates=True)
+    log.info("Uploading to postgres")
+
+    upload_to_postgres(update_ftp_fns, safety_test_parse=safety_test_parse, batch_size=5000, updates=True, modtimes=update_ftp_mod_times)
+
+    log.info("Uploaded!")
+
+
+
 def download_ftp_baseline(force_update=False):
     """
     Grab all the latest baseline files (checking if already done first)
@@ -78,6 +144,10 @@ def download_ftp_baseline(force_update=False):
     edit safety_test_parse in config file for deployment
 
     """
+    if dbutil.last_update(update_type='pubmed_baseline') and force_update==False:
+        log.warning("Baseline files already in database, no action will be taken. To delete database and start again rerun with force_update=True")
+        return None
+
     safety_test_parse = config.SAFETY_TEST_PARSE
     if not safety_test_parse:
         log.warning("NB The parse is not being test run... This is quicker, but unexpected code crashes will result in local database being lost")
@@ -99,34 +169,41 @@ def download_ftp_baseline(force_update=False):
     upload_to_postgres(baseline_ftp_fns, safety_test_parse, force_update=force_update)
     log.info("Uploaded!")
     dbutil.log_update(update_type='pubmed_baseline', source_filename=os.path.basename(baseline_ftp_fns[0])[:8], source_date=get_date_from_fn(baseline_ftp_fns[0]), download_date=download_date)
-    # log.info("Retrieving ptyp info")
-    # add_ptyp()
 
-def download_md5s(gz_fns):
+
+def download_md5s(gz_fns, updates=False):
     """
     get the hashes from a list of PubMed gziped filenames
     """
-    already_done = already_done_md5s()
+    already_done = already_done_md5s(updates=updates)
     ftp = get_ftp()
     for i, gz_fn in enumerate(tqdm.tqdm(gz_fns, desc='md5 hashes downloaded from PubMed FTP server')):
         if os.path.basename(gz_fn) + ".md5" in already_done:
             # skip the already downloaded hashes
             continue
-        out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
+        if updates:
+            out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', os.path.basename(gz_fn))
+        else:
+            out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
         with open(out_filename + ".md5", 'wb') as f:
             ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
 
-def download_and_validate_gzs(gz_fns):
+def download_and_validate_gzs(gz_fns, updates=False):
     """
     download datafiles, and validate
+    if updates=True, saves to the updates local folder
     """
-    already_done = already_done_gzs()
+    already_done = already_done_gzs(updates=updates)
 
     for i, gz_fn in enumerate(tqdm.tqdm(gz_fns, desc='data files downloaded from PubMed FTP server')):
         if os.path.basename(gz_fn) in already_done:
             # skip the already downloaded files
             continue
-        out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
+
+        if updates:
+            out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', os.path.basename(gz_fn))
+        else:
+            out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
 
         ftp = get_ftp()
 
@@ -136,14 +213,17 @@ def download_and_validate_gzs(gz_fns):
         with open(out_filename + ".md5", 'wb') as f:
             ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
 
-        print(out_filename)
+
 
         validate_file(out_filename, out_filename + ".md5", raise_for_errors=True)
 
 
-def validate_downloaded_data(fns):
+def validate_downloaded_data(fns, updates=False):
     for fn in tqdm.tqdm(fns, desc="Validating local files"):
-        fn_path = os.path.join(config.PUBMED_LOCAL_DATA_PATH, fn)
+        if updates:
+            fn_path = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', fn)
+        else:
+            fn_path = os.path.join(config.PUBMED_LOCAL_DATA_PATH, fn)
         validate_file(fn_path, fn_path+".md5", raise_for_errors=True)
     return True
 
@@ -161,13 +241,24 @@ def validate_file(fn, hash_fn, raise_for_errors=True):
         return (obs_md5 == true_md5)
 
 
-def iter_abstracts(fn):
+def iter_abstracts(fn, updates=False, skip_list=None):
+    if skip_list is None:
+        skip_list = set()
     with open(fn, 'rb') as f:
         decompressedFile = gzip.GzipFile(fileobj=f, mode='r')
         for event, elem in ET.iterparse(decompressedFile, events=("start", "end")):
             if elem.tag == "MedlineCitation" and event=="end":
+                if elem.find('PMID').text in skip_list:
+                    continue
                 p_article = pmreader.PubmedCorpusReader(xml_ET=elem)
-                yield p_article.to_dict()        
+                if not updates:
+                    yield p_article.to_dict()
+                else:
+                    yield {"action": "update", "article": p_article.to_dict()}
+            if elem.tag == "DeleteCitation" and event=="end" and updates:
+                yield {"action": "delete_list", "pmids": [r.text for r in elem]}
+
+
 
 def classify(entry_batch):
 
@@ -179,13 +270,16 @@ def classify(entry_batch):
     threshold_types = ["precise", "balanced", "sensitive"]
 
 
-  
+
 
     X = []
 
     for entry in entry_batch:
         row = {"title": entry['title'], "abstract": entry['abstract_plaintext'], "ptyp": entry['ptyp']}
-        if entry['status'] == 'MEDLINE':
+        if entry['status'] == 'MEDLINE' and entry['indexing_method'] != 'Automated':
+            # https://www.nlm.nih.gov/pubs/techbull/ja18/ja18_indexing_method.html
+            # new addition
+            # we will use either fully manual, or manually corrected ('Curated') ptyps, but ignore any fully automated
             row['use_ptyp'] = True
         else:
             row['use_ptyp'] = False
@@ -198,14 +292,17 @@ def classify(entry_batch):
     out = []
 
     for pred in preds:
-        row = {"clf_type": pred["model"], "clf_score": pred['score'], "clf_date": datetime.datetime.now(), "ptyp_rct": pred['ptyp_rct']}
+
+        row = {"clf_type": pred["model"], "clf_score": pred['score'], "clf_date": datetime.datetime.now(), "ptyp_rct": pred['ptyp_rct'],
+        "score_cnn": pred["preds"]["cnn"], "score_svm": pred["preds"]["svm"], "score_svm_cnn": pred["preds"]["svm_cnn"], "score_svm_ptyp": pred["preds"]["svm_ptyp"],
+        "score_cnn_ptyp": pred["preds"]["cnn_ptyp"], "score_svm_cnn_ptyp": pred["preds"]["svm_cnn_ptyp"]}
+
         if pred["model"] == "svm_cnn_ptyp":
             for tt in threshold_types:
                 row['is_rct_{}'.format(tt)] = (pred['score'] >= thresholds_ptyp[tt])
         elif pred["model"] == "svm_cnn":
             for tt in threshold_types:
                 row['is_rct_{}'.format(tt)] = (pred['score'] >= thresholds_no_ptyp[tt])
-
         out.append(row)
     return out
 
@@ -222,12 +319,14 @@ def get_date_from_fn(ftp_fn):
     bn = os.path.basename(ftp_fn)
     return datetime.datetime(int("20" + bn[6:8])-1, 12, 31)
 
-    
-def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=500, force_update=False):
+
+
+
+def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update=False, updates=False, modtimes=None):
     """
     ftp_fns = the filenames to parse (converted to local fns here)
     safety_test_parse = recommended, try and read all the abstracts before deleting the existing data
-    batch_size = how many to do at once (often lower = fatster)    
+    batch_size = how many to do at once (often lower = fatster)
     force_update = whether to delete the database
     """
 
@@ -235,70 +334,115 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=500, force_update=
 
     if safety_test_parse:
         log.info("Testing parse before inserting into database")
-
         for idx, ftp_fn in enumerate(ftp_fns):
-            local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(ftp_fn))
-            for entry in tqdm.tqdm(iter_abstracts(local_fn), desc="testing the abstract parsing ({}/{}) {}".format(idx, num_files, local_fn)):
-                _ = (entry['pmid'], entry['year'], entry['title'], entry['abstract_plaintext'], json.dumps(entry),  
-                json.dumps(entry), ftp_fn)
+            if updates:
+                local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', os.path.basename(ftp_fn))
+            else:
+                local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(ftp_fn))
+            for entry in tqdm.tqdm(iter_abstracts(local_fn, updates=updates), desc="testing the abstract parsing ({}/{}) {}".format(idx, num_files, local_fn)):
+                if updates:
+                    if entry['action'] == 'update':
+                        _ = (entry['article']['pmid'], entry['article']['year'], entry['article']['title'], entry['article']['abstract_plaintext'], json.dumps(entry['article']), ftp_fn)
+                    elif entry['action'] == 'delete_list':
+                        _ = entry['pmids']
+                else:
+                    _ = (entry['pmid'], entry['year'], entry['title'], entry['abstract_plaintext'], json.dumps(entry), ftp_fn)
+
+
 
     # if safety mode only delete existing database where the parse has completed without exception
-    if force_update:
-        log.warning("Deleting all entries from PubMed database")
-        cur = dbutil. db.cursor()
-        cur.execute("DELETE FROM pubmed;")
-        cur.close()
-        dbutil.db.commit()
-
-        already_done_pmids = set()
-        # dangerous command....
+    if updates==False:
+        if force_update:
+            log.warning("Deleting all entries from PubMed database")
+            cur = dbutil. db.cursor()
+            cur.execute("DELETE FROM pubmed;")
+            cur.close()
+            dbutil.db.commit()
+            already_done_pmids = set()
+            # dangerous command....
+        else:
+            # get already done PMIDs
+            cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT pmid FROM pubmed;")
+            already_done_pmids = set((r['pmid'] for r in cur.fetchall()))
+            log.warning("will skip {} already done... rerun with 'force_update=True' to reclassify all".format(len(already_done_pmids)))
     else:
-        # get already done PMIDs
-        cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cur.execute("SELECT pmid FROM pubmed;")
-        already_done_pmids = set((r['pmid'] for r in cur.fetchall()))
-        log.warning("will skip {} already done... rerun with 'force_update=True' to reclassify all".format(len(already_done_pmids)))
-
+        already_done_pmids = set()
 
 
 
     stats = collections.Counter()
 
-    for idx, ftp_fn in enumerate(ftp_fns):
-        local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(ftp_fn))
-        for entry_batch in tqdm.tqdm(grouper(iter_abstracts(local_fn), batch_size), desc="classifying and uploading postgres ({}/{}) {}".format(idx, num_files, local_fn)):
+    if updates:
+        logged_completed_fns = already_done_updates()
 
+    for idx, ftp_fn in enumerate(ftp_fns):
+
+        if updates:
+            bn = os.path.basename(ftp_fn)
+            if bn in logged_completed_fns:
+                continue
+            local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', bn)
+        else:
+            local_fn = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(ftp_fn))
+
+
+        for entry_batch in tqdm.tqdm(grouper(iter_abstracts(local_fn, updates=updates, skip_list=already_done_pmids), batch_size), desc="classifying and uploading postgres ({}/{}) {}".format(idx, num_files, local_fn)):
+
+            include_rows = []
+            exclude_rows = []
 
 
             stats["batches classified"] += 1
 
-            entry_batch = [r for r in entry_batch if r['pmid'] not in already_done_pmids]
 
+            if updates:
+
+                pmids_to_delete = []
+                for r in entry_batch:
+                    if r['action']=='delete_list':
+                        pmids_to_delete.extend(r['pmids'])
+
+                entry_batch = [r['article'] for r in entry_batch if r['action']=='update']
+
+            # reverse the list and
+            # remove any duplicates
+            # (so that the later entries are added only)
+            dedupe = []
+            enc = set()
+
+            while entry_batch:
+                r = entry_batch.pop()
+                if r['pmid'] not in enc:
+                    dedupe.append(r)
+                    enc.add(r['pmid'])
+
+            entry_batch, dedupe = dedupe, entry_batch
+            if len(entry_batch) == 0:
+                continue
             preds = classify(entry_batch)
 
             for entry, pred in zip(entry_batch, preds):
-                if not pred["is_rct_sensitive"]:
-                    # ignore anything that isn't an RCT by sensitive criteria at this stage
-                    stats["articles excluded"] += 1
-                    row = (entry['pmid'], entry['year'], pred['ptyp_rct'], pred['clf_type'], pred['clf_score'])
-                    cur = dbutil. db.cursor()
-                    cur.execute("INSERT INTO pubmed_excludes (pmid, year, ptyp_rct, clf_type, clf_score) VALUES (%s, %s, %s, %s, %s);", row)
-                    cur.close()
-                    dbutil.db.commit()
-                    continue
 
-                stats["articles included"] += 1
 
-                row = (entry['pmid'], entry['year'], entry['title'], entry['abstract_plaintext'], 
-                        json.dumps(entry), ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
-                        pred['is_rct_balanced'], pred['is_rct_sensitive'])
+                row = (entry['pmid'], entry['status'], entry['year'], entry['title'], entry['abstract_plaintext'],
+                    json.dumps(entry), ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
+                    pred['is_rct_balanced'], pred['is_rct_sensitive'], entry['indexing_method'], pred['score_svm'], pred['score_cnn'], pred['score_svm_cnn'],
+                    pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'])
 
-                # ignore clf_type, clf_score, and clf_date for the moment
-                cur = dbutil. db.cursor()
-                cur.execute("INSERT INTO pubmed (pmid, year, ti, ab, pm_data, source_filename, clf_type, clf_score, clf_date, ptyp_rct, is_rct_precise, is_rct_balanced, is_rct_sensitive) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", 
-                    row)
-                cur.close()
-                dbutil.db.commit()
+                include_rows.append(row)
+
+            cur = dbutil. db.cursor()
+            if updates:
+                for pm in pmids_to_delete:
+                    cur.execute("DELETE FROM pubmed WHERE pmid=(%s);", (pm,))
+
+            execute_values(cur, "INSERT INTO pubmed (pmid, pm_status, year, ti, ab, pm_data, source_filename, clf_type, clf_score, clf_date, ptyp_rct, is_rct_precise, is_rct_balanced, is_rct_sensitive, indexing_method, score_svm, score_cnn, score_svm_cnn, score_svm_ptyp, score_cnn_ptyp, score_svm_cnn_ptyp) VALUES %s ON CONFLICT (pmid) DO UPDATE SET year=EXCLUDED.year, ti=EXCLUDED.ti, ab=EXCLUDED.ab, pm_data=EXCLUDED.pm_data, source_filename=EXCLUDED.source_filename, clf_type=EXCLUDED.clf_type, clf_score=EXCLUDED.clf_score, clf_date=EXCLUDED.clf_date, ptyp_rct=EXCLUDED.ptyp_rct, is_rct_precise=EXCLUDED.is_rct_precise, is_rct_balanced=EXCLUDED.is_rct_balanced, is_rct_sensitive=EXCLUDED.is_rct_sensitive, indexing_method=EXCLUDED.indexing_method;", include_rows, template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+
+            cur.close()
+            dbutil.db.commit()
+        if updates:
+            dbutil.log_update(update_type='pubmed_update', source_filename=os.path.basename(ftp_fn), source_date=modtimes[os.path.basename(ftp_fn)], download_date=datetime.datetime.now())
 
     log.info(str(stats))
 
@@ -307,7 +451,7 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=500, force_update=
 #     cur.execute("update pubmed set ptyp_rct=(pm_data @> '{\"ptyp\": [\"Randomized Controlled Trial\"]}');")
 #     cur.close()
 #     dbutil.db.commit()
-    
+
 
 
 
