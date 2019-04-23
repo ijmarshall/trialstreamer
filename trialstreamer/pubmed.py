@@ -24,8 +24,9 @@ import glob
 import psycopg2
 import collections
 from itertools import zip_longest
-from robotsearch.robots import rct_robot
 from psycopg2.extras import execute_values
+import requests
+import time
 
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
@@ -33,10 +34,17 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
 
 
 
-rct_clf = rct_robot.RCTRobot()
+
+
+
 log = logging.getLogger(__name__)
 
 homepage = "ftp.ncbi.nlm.nih.gov"
+
+
+
+
+
 
 def get_ftp():
     """
@@ -90,13 +98,6 @@ def already_done_gzs(updates=False):
     fns =  glob.glob(pth)
     return set([os.path.basename(r) for r in fns])
 
-def already_done_clfs():
-    """
-    glob which classification json files already done
-    """
-    fns =  glob.glob(os.path.join(config.PUBMED_LOCAL_CLASSIFICATIONS_PATH, '*.json'))
-    return set([os.path.basename(r) for r in fns])
-
 def already_done_updates():
     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute("SELECT source_filename FROM update_log WHERE update_type='pubmed_update';")
@@ -134,6 +135,18 @@ def download_ftp_updates(safety_test_parse=True):
     upload_to_postgres(update_ftp_fns, safety_test_parse=safety_test_parse, batch_size=5000, updates=True, modtimes=update_ftp_mod_times)
 
     log.info("Uploaded!")
+    log.info("Refreshing counts")
+    update_counts()
+    log.info("All done successfully!")
+
+
+
+
+def update_counts():
+    cur = dbutil. db.cursor()
+    cur.execute("refresh materialized view pubmed_year_counts;")
+    cur.close()
+    dbutil.db.commit()
 
 
 
@@ -168,6 +181,10 @@ def download_ftp_baseline(force_update=False):
     log.info("Uploading to postgres")
     upload_to_postgres(baseline_ftp_fns, safety_test_parse, force_update=force_update)
     log.info("Uploaded!")
+    log.info("Refreshing counts")
+    update_counts()
+    log.info("All done successfully!")
+
     dbutil.log_update(update_type='pubmed_baseline', source_filename=os.path.basename(baseline_ftp_fns[0])[:8], source_date=get_date_from_fn(baseline_ftp_fns[0]), download_date=download_date)
 
 
@@ -259,6 +276,30 @@ def iter_abstracts(fn, updates=False, skip_list=None):
                 yield {"action": "delete_list", "pmids": [r.text for r in elem]}
 
 
+def predict(X, tasks=None, filter_rcts="is_rct_sensitive"):
+
+    if tasks is None:
+        tasks = ['rct_bot']
+    base_url = config.ROBOTREVIEWER_URL
+    upload_data = {
+        "articles": X,
+        "robots": tasks,
+        "filter_rcts": filter_rcts
+    }
+    r = requests.post(base_url+'queue-documents', json=upload_data)
+    report_id = json.loads(r.json())
+
+    def check_report(report_id):
+        r = requests.get(base_url +'report-status/'+report_id['report_id'])
+        return json.loads(r.json())['state'] == 'SUCCESS'
+
+    while not check_report(report_id):
+        time.sleep(0.3)
+
+    report = json.loads(requests.get(base_url +'report/'+report_id['report_id']).json())
+    return report
+
+
 
 def classify(entry_batch):
 
@@ -275,24 +316,23 @@ def classify(entry_batch):
     X = []
 
     for entry in entry_batch:
-        row = {"title": entry['title'], "abstract": entry['abstract_plaintext'], "ptyp": entry['ptyp']}
+        row = {"ti": entry['title'], "ab": entry['abstract_plaintext'], "ptyp": entry['ptyp']}
         if entry['status'] == 'MEDLINE' and entry['indexing_method'] != 'Automated':
             # https://www.nlm.nih.gov/pubs/techbull/ja18/ja18_indexing_method.html
             # new addition
             # we will use either fully manual, or manually corrected ('Curated') ptyps, but ignore any fully automated
-            row['use_ptyp'] = True
+            pass
         else:
-            row['use_ptyp'] = False
+            row.pop('ptyp', None)
         X.append(row)
 
-    preds = rct_clf.predict(X, filter_type="sensitive", filter_class="svm_cnn")
+    preds = [r['rct_bot'] for r in predict(X)]
 
     # prepare data out
 
     out = []
 
     for pred in preds:
-
         row = {"clf_type": pred["model"], "clf_score": pred['score'], "clf_date": datetime.datetime.now(), "ptyp_rct": pred['ptyp_rct'],
         "score_cnn": pred["preds"]["cnn"], "score_svm": pred["preds"]["svm"], "score_svm_cnn": pred["preds"]["svm_cnn"], "score_svm_ptyp": pred["preds"]["svm_ptyp"],
         "score_cnn_ptyp": pred["preds"]["cnn_ptyp"], "score_svm_cnn_ptyp": pred["preds"]["svm_cnn_ptyp"]}
@@ -420,6 +460,7 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
             entry_batch, dedupe = dedupe, entry_batch
             if len(entry_batch) == 0:
                 continue
+
             preds = classify(entry_batch)
 
             for entry, pred in zip(entry_batch, preds):
@@ -446,11 +487,73 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
     log.info(str(stats))
 
-# def add_ptyp():
-#     cur = dbutil. db.cursor()
-#     cur.execute("update pubmed set ptyp_rct=(pm_data @> '{\"ptyp\": [\"Randomized Controlled Trial\"]}');")
-#     cur.close()
-#     dbutil.db.commit()
+
+
+def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
+    """
+    compute registry links from all PubMed articles
+    """
+
+    if limit_to not in ['is_rct_balanced', 'is_rct_sensitive',
+                        'is_rct_precise']:
+        raise Exception('limit_to not recognised, needs to be '
+                        '"is_rct_precise","is_rct_balanced", or '
+                        '"is_rct_sensitive"')
+
+    if limit_to == 'is_rct_sensitive':
+        log.warning("Getting metadata for all articles with sensitive cutoff.."
+                    "May take a long time...")
+
+
+    cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    if force_refresh:
+        # deleting doi table from database
+        log.info('deleting all PICO data from table...')
+        cur.execute('delete from pubmed_pico;')
+        already_done_picos = set()
+    else:
+        log.info('getting list of all PICOs done so far...')
+        cur.execute("SELECT pmid FROM pubmed_pico;")
+        records = cur.fetchall()
+        already_done_picos = set((r['pmid'] for r in records))
+
+
+    log.info('Fetching data to annotate')
+    cur.execute("SELECT pmid, ti, ab FROM pubmed WHERE {}=true;".format(limit_to))
+    records = cur.fetchall()
+
+    log.info('PICO annotation in progress')
+
+    for r in tqdm.tqdm(grouper(records, batch_size), desc='articles annotated'):
+
+        r_f = [i for i in r if i['pmid'] not in already_done_picos]
+
+        if r_f:
+
+            annotations = predict(r_f, tasks=['pico_span_bot', 'sample_size_bot'], filter_rcts='none')
+
+
+
+
+            for a in annotations:
+
+
+                sample_size = a.get('sample_size_bot', {}).get('num_randomized')
+                if sample_size == 'not found':
+                    sample_size = None
+
+                cur.execute("INSERT INTO pubmed_pico (pmid, population, interventions, outcomes, num_randomized) VALUES (%s, %s, %s, %s, %s);",
+                    (a['pmid'],
+                     json.dumps(a['pico_span_bot']['population']),
+                     json.dumps(a['pico_span_bot']['interventions']),
+                     json.dumps(a['pico_span_bot']['outcomes']),
+                     sample_size))
+
+            dbutil.db.commit()
+
+
+
 
 
 

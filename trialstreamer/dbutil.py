@@ -40,6 +40,17 @@ def make_tables():
             source_filename varchar(256)
             );
 
+create table if not exists pubmed_pico (
+    id serial primary key,
+    pmid varchar(16) unique,
+    population jsonb,
+    interventions jsonb,
+    outcomes jsonb,
+    num_randomized integer
+);
+
+create index if not exists idx_pubmed_pico on pubmed_pico (pmid);
+
 create index if not exists idx_is_rct_precise on pubmed (is_rct_precise)
     where is_rct_precise=true;
 create index if not exists idx_is_rct_balanced on pubmed (is_rct_balanced)
@@ -51,13 +62,6 @@ create index if not exists idx_pmid on pubmed (pmid) where
 create index if not exists idx_pm_status on pubmed(pm_status)
     where is_rct_balanced=true;
 
-create index if not exists idx_pmid_dois on pmid_dois (pmid);
-create index if not exists idx_pm_data on pubmed using gin((pm_data->'mesh'))
-    where is_rct_balanced=true;
-create index if not exists idx_ti_vec on pubmed using gin(to_tsvector('english'
-    , ti)) where is_rct_balanced=true;
-create index if not exists idx_ti_ab_vec on pubmed using
-    gin(to_tsvector('english', (ti || '  ' || ab))) where is_rct_balanced=true;
 
 
 create table if not exists ictrp (
@@ -84,7 +88,16 @@ create table if not exists pmid_dois (
             doi varchar(512)
             );
 
-create index if not exists idx_pmid_dois on pmid_dois (pmid);
+
+
+create table if not exists registry_links (
+            id serial primary key,
+            regid varchar(32),
+            pmid varchar(16)
+            );
+
+create index if not exists idx_registry_pmids on registry_links (pmid);
+create index if not exists idx_registry_regids on registry_links (regid);
 
 create table if not exists update_log (
             id serial primary key,
@@ -94,6 +107,23 @@ create table if not exists update_log (
             download_date timestamp
             );
 
+
+create index if not exists idx_pmid_dois on pmid_dois (pmid);
+create index if not exists idx_pm_data on pubmed using gin((pm_data->'mesh'))
+    where is_rct_balanced=true;
+create index if not exists idx_ti_vec on pubmed using gin(to_tsvector('english'
+    , ti)) where is_rct_balanced=true;
+create index if not exists idx_ti_ab_vec on pubmed using
+    gin(to_tsvector('english', (ti || '  ' || ab))) where is_rct_balanced=true;
+
+
+create materialized view if not exists pubmed_year_counts AS
+    select year,
+        sum(case is_rct_precise when true then 1 else 0 end) as is_rct_precise,
+        sum(case is_rct_balanced when true then 1 else 0 end) as is_rct_balanced,
+        sum(case is_rct_sensitive when true then 1 else 0 end) as is_rct_sensitive,
+        sum(case ptyp_rct when 1 then 1 else 0 end) as ptyp_rct
+from pubmed where is_rct_sensitive=true group by year;
 
 
 

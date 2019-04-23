@@ -11,7 +11,12 @@ from collections import defaultdict
 from flask import jsonify
 from io import BytesIO as StringIO # py3
 
+
 app = Flask(__name__)
+
+
+
+
 
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
@@ -63,18 +68,24 @@ def rcts():
 
     breakdowns = defaultdict(dict)
 
+    cur.execute("select * from pubmed_year_counts order by year;")    
+    records = cur.fetchall()
+    for r in records:
+        breakdowns[r['year']]["PubMed PT tag"] = r['ptyp_rct']
+        breakdowns[r['year']]["precise"] = r['is_rct_precise']
+        breakdowns[r['year']]["balanced"] = r['is_rct_balanced']
+        breakdowns[r['year']]["sensitive"] = r['is_rct_sensitive']
 
 
-    for t in threshold_types:
+    cur.execute("select sum(is_rct_precise) as is_rct_precise, sum(is_rct_balanced) as is_rct_balanced, sum(is_rct_sensitive) as is_rct_sensitive, sum(ptyp_rct) as ptyp_rct from pubmed_year_counts;")
+    record = cur.fetchone()
+    totals.append({"count": record['is_rct_precise'], "threshold_type": "precise"})
+    totals.append({"count": record['is_rct_balanced'], "threshold_type": "balanced"})
+    totals.append({"count": record['is_rct_sensitive'], "threshold_type": "sensitive"})
+    totals.append({"count": record['ptyp_rct'], "threshold_type": "PubMed PT tag"})
+        
 
-        cur.execute("select count(*) from pubmed where is_rct_{}=true;".format(t))
-        record = cur.fetchone()
-        totals.append({"count": record['count'], "threshold_type": t})
 
-        cur.execute("select year, count(*) from pubmed where is_rct_{}=true group by year;".format(t))
-        records = cur.fetchall()
-        for r in records:
-            breakdowns[r['year']][t] = r['count']
 
     # # add all non-ptyp estimates
     # cur.execute("select year, count(*) from pubmed where score_svm_cnn>={} group by year;".format(clf_cutoffs['thresholds']['svm_cnn']['precise']))
@@ -89,13 +100,6 @@ def rcts():
 #            breakdowns[r['year']]["{} no ptyp".format(t)] = r['count']
 #
 
-    cur.execute("select count(*), year from pubmed where ptyp_rct=1 group by year;")
-    records = cur.fetchall()
-    pt_total = 0
-    for r in records:
-        breakdowns[r['year']]["PubMed PT tag"] = r['count']
-        pt_total += r['count']
-    totals.append({"count": pt_total, "threshold_type": "PubMed PT tag"})
 
     cur.execute("select count(*), year from ictrp group by year;")
     records = cur.fetchall()

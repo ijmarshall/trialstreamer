@@ -6,7 +6,7 @@ in progress...
 
 1. Install and run postgresql
 2. Create a database named 'trialstreamer'
-3. make a copy of config.json.bak to config.json, and populate
+3. make a copy of config.json.example to config.json, and populate
 4. Download RobotSearch (https://github.com/ijmarshall/robotsearch) and ensure is accessible on PYTHONPATH
 5. run the following code to classify PubMed (typically 20 hours with GPU)
 ```
