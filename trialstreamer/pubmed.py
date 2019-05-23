@@ -36,7 +36,6 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
 
 
 
-
 log = logging.getLogger(__name__)
 
 homepage = "ftp.ncbi.nlm.nih.gov"
@@ -486,6 +485,7 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
             dbutil.log_update(update_type='pubmed_update', source_filename=os.path.basename(ftp_fn), source_date=modtimes[os.path.basename(ftp_fn)], download_date=datetime.datetime.now())
 
     log.info(str(stats))
+    dbutil.db.commit()
 
 
 

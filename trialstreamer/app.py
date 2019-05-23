@@ -178,7 +178,7 @@ def query():
     start = int(request.args.get('start', 0))
     end = int(request.args.get('end', start+10))
     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT pm_data FROM pubmed WHERE ti_vec @@ to_tsquery(%s) limit %s offset %s;", (q, end-start, int(start)))
+    cur.execute("SELECT pm_data FROM pubmed WHERE ti @@ to_tsquery(%s) limit %s offset %s;", (q, end-start, int(start)))
     records = cur.fetchall()
     return jsonify(records)
 
