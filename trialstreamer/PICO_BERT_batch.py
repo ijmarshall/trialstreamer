@@ -86,3 +86,7 @@ def map_all_in_db():
             o_str = build_insert_str(r['id'], 'o_v', o_emb)
             cur.execute(o_str)
 
+
+if __name__ == '__main__':
+    map_all_in_db()
+
