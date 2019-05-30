@@ -12,7 +12,7 @@ from trialstreamer import dbutil, PICO_BERT_TF
 A bit of code to add embedding columns to the pubmed_pico table
 '''
 def create_embedding_cols():
-    add_col_str = '''alter table pubmed_pico
+    create_tables_command = '''alter table pubmed_pico
                     add column p_v float[],
                     add column i_v float[],
                     add column o_v float[];'''
