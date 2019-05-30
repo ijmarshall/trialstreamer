@@ -65,19 +65,24 @@ def map_all_in_db():
             print ("on record {0} / {1}".format(i, total))
             
         #import pdb; pdb.set_trace()
-        if len(r['population']) > 0:
-            p_emb = bert.encode(r['population'])
+        def filter_empty(snippets):
+            return [s for s in snippets if s!=""]
+    
+        p_snippets = filter_empty(r['population'])
+        if len(p_snippets) > 0:
+            p_emb = bert.encode(p_snippets)
             p_str = build_insert_str(r['id'], 'p_v', p_emb)
             cur.execute(p_str)
 
-        if len(r['interventions']) > 0:
-            i_emb = bert.encode(r['interventions'])
+        i_snippets = filter_empty(r['interventions'])
+        if len(i_snippets) > 0:
+            i_emb = bert.encode(i_snippets)
             i_str = build_insert_str(r['id'], 'i_v', i_emb)
             cur.execute(i_str)
 
-        
-        if len(r['outcomes']) > 0:
-            o_emb = bert.encode(r['outcomes'])
+        o_snippets = filter_empty(r['outcomes'])
+        if len(o_snippets) > 0:
+            o_emb = bert.encode(o_snippets)
             o_str = build_insert_str(r['id'], 'o_v', o_emb)
             cur.execute(o_str)
 
