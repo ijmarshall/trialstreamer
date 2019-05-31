@@ -4,7 +4,8 @@ Code to generate PICO embeddings for articles in the RCT database in batch.
 
 import psycopg2
 import json 
-
+import sys
+sys.path.insert(0,'/home/byron/code/trialstreamer')
 from trialstreamer import dbutil, PICO_BERT_TF
 
 
@@ -48,17 +49,20 @@ def map_all_in_db():
     This assumes that the pubmed_pico table has been modified to include
     vector columns.
     '''
+    print("creating BERT...")
 
     # instantiate BERT
     bert = PICO_BERT_TF.PICOBERT_TF()
 
-
+    print("getting studies from db...")
     # retrieve all PICO snippets in the database
     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
     cur.execute("select * from pubmed_pico;")    
+
     records = cur.fetchall()
     total = len(records)
+    print("found {0} records!".format(total))
+
     for i, r in enumerate(records):
 
         if i % 100 == 0:
