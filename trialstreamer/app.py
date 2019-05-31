@@ -33,7 +33,7 @@ def status():
     """
     Retrieves most recent update dates
     """
-    update_types = ["ictrp", "pubmed_baseline", "pubmed_update"]
+    update_types = ["ictrp", "pubmed_baseline", "pubmed_update", "picospan_partial", "picospan_full", "picomesh_partial", "picomesh_full"]
 
     out = []
 
