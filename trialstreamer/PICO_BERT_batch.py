@@ -67,8 +67,6 @@ def map_all_in_db(force_refresh=False):
     log.info('instantiating BERT')
     bert = PICO_BERT_TF.PICOBERT_TF()
 
-
-
     log.info('retrieve all PICO snippets in the database')
     read_cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     update_cur = dbutil.db.cursor()
@@ -77,23 +75,22 @@ def map_all_in_db(force_refresh=False):
         # deleting doi table from database
         log.info('redoing all PICO BERTs...')
         log.info('getting source data')
-        read_cur.execute("SELECT * FROM pubmed_pico;")
+        read_cur.execute("SELECT id, population, interventions, outcomes FROM pubmed_pico;")
         records = read_cur.fetchall()
     else:
         log.info('calculating PICO BERTs for new records only...')
         log.info('getting source data')
-        read_cur.execute("SELECT * FROM pubmed_pico where (p_v is null) or (i_v is null) or (o_v is null);")
+        read_cur.execute("SELECT id, population, interventions, outcomes FROM pubmed_pico where (p_v is null) or (i_v is null) or (o_v is null);")
         records = read_cur.fetchall()
 
     log.info('calculating number of records to process')
 
-    total = len(records)
-
+    
     batch_size = 100
 
     log.info('processing the BERTs!')
 
-    for batch in tqdm.tqdm(grouper(records, batch_size),  desc="articles processed for BERT embeddings", total=total/batch_size):
+    for batch in tqdm.tqdm(grouper(records, batch_size),  desc="articles processed for BERT embeddings"):
         
         for r in batch:           
             def filter_empty(snippets):
