@@ -49,8 +49,15 @@ create table if not exists pubmed_pico (
     population_mesh jsonb,
     interventions_mesh jsonb,
     outcomes_mesh jsonb,
-    num_randomized integer
+    num_randomized integer,
+    p_v float[],
+    i_v float[],
+    o_v float[]
 );
+
+
+                
+
 
 
 create index if not exists idx_pubmed_pico on pubmed_pico (pmid);

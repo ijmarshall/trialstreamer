@@ -604,7 +604,7 @@ def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_siz
     batch_size = 100
 
     for batch in tqdm.tqdm(grouper(records, batch_size), desc='articles annotated'):
-        out = []
+        
         for r in batch:
             pmid = r['pmid']
             population_mesh = minimap.get_unique_terms(r['population'])
@@ -616,7 +616,7 @@ def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_siz
                    json.dumps(outcomes_mesh),
                    pmid)
             
-            out.append(row)
+            
             
             update_cur.execute("update pubmed_pico set population_mesh=(%s), interventions_mesh=(%s), outcomes_mesh=(%s) where pmid=(%s);",
         row)
