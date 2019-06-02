@@ -27,6 +27,9 @@ from itertools import zip_longest
 from psycopg2.extras import execute_values
 import requests
 import time
+from trialstreamer import minimap
+
+
 
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
@@ -108,6 +111,7 @@ def download_ftp_updates(safety_test_parse=True):
     Grab the updates
 
     """
+    log.info("Obtaining daily updates from PubMed")
     if not dbutil.last_update(update_type='pubmed_baseline'):
         log.warning("No baseline files in database; stopping. Run download_ftp_baseline() before updates")
         return None
@@ -142,7 +146,7 @@ def download_ftp_updates(safety_test_parse=True):
 
 
 def update_counts():
-    cur = dbutil. db.cursor()
+    cur = dbutil.db.cursor()
     cur.execute("refresh materialized view pubmed_year_counts;")
     cur.close()
     dbutil.db.commit()
@@ -156,6 +160,7 @@ def download_ftp_baseline(force_update=False):
     edit safety_test_parse in config file for deployment
 
     """
+    log.info("Checking baseline data from PubMed")
     if dbutil.last_update(update_type='pubmed_baseline') and force_update==False:
         log.warning("Baseline files already in database, no action will be taken. To delete database and start again rerun with force_update=True")
         return None
@@ -464,13 +469,13 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
             for entry, pred in zip(entry_batch, preds):
 
+                if pred['is_rct_sensitive']:
+                    row = (entry['pmid'], entry['status'], entry['year'], entry['title'], entry['abstract_plaintext'],
+                        json.dumps(entry), ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
+                        pred['is_rct_balanced'], pred['is_rct_sensitive'], entry['indexing_method'], pred['score_svm'], pred['score_cnn'], pred['score_svm_cnn'],
+                        pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'])
 
-                row = (entry['pmid'], entry['status'], entry['year'], entry['title'], entry['abstract_plaintext'],
-                    json.dumps(entry), ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
-                    pred['is_rct_balanced'], pred['is_rct_sensitive'], entry['indexing_method'], pred['score_svm'], pred['score_cnn'], pred['score_svm_cnn'],
-                    pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'])
-
-                include_rows.append(row)
+                    include_rows.append(row)
 
             cur = dbutil. db.cursor()
             if updates:
@@ -489,10 +494,20 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
 
 
+
+# def meshify_pico():
+#     """
+#     update an un-meshed table with mesh picos
+#     """
+
+
+
 def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
     """
-    compute registry links from all PubMed articles
+    compute picos links from all PubMed articles
     """
+
+    log.warning("Getting PICO spans via RobotReviewer")
 
     if limit_to not in ['is_rct_balanced', 'is_rct_sensitive',
                         'is_rct_precise']:
@@ -533,9 +548,6 @@ def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100
 
             annotations = predict(r_f, tasks=['pico_span_bot', 'sample_size_bot'], filter_rcts='none')
 
-
-
-
             for a in annotations:
 
 
@@ -552,12 +564,73 @@ def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100
 
             dbutil.db.commit()
 
+    update_type = "picospan_full" if force_refresh else "picospan_partial" 
+    dbutil.log_update(update_type=update_type, source_date=datetime.datetime.now())
 
 
 
+def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
+
+    log.warning("Computing PICO mesh terms")
+
+
+    if limit_to not in ['is_rct_balanced', 'is_rct_sensitive',
+                        'is_rct_precise']:
+        raise Exception('limit_to not recognised, needs to be '
+                        '"is_rct_precise","is_rct_balanced", or '
+                        '"is_rct_sensitive"')
+
+    if limit_to == 'is_rct_sensitive':
+        log.warning("Getting metadata for all articles with sensitive cutoff.."
+                    "May take a long time...")
+
+
+    read_cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    update_cur = dbutil.db.cursor()
+
+    if force_refresh:
+        # deleting doi table from database
+        log.info('redoing all PICO mesh terms...')
+        log.info('getting source data')
+        read_cur.execute("SELECT * FROM pubmed_pico;")
+        records = read_cur.fetchall()
+    else:
+        log.info('updating new records...')
+        log.info('getting source data')
+        read_cur.execute("SELECT * FROM pubmed_pico where (population_mesh is null) or (interventions_mesh is null) or (outcomes_mesh is null);")
+        records = read_cur.fetchall()
+
+
+    batch_size = 100
+
+    for batch in tqdm.tqdm(grouper(records, batch_size), desc='articles annotated'):
+        
+        for r in batch:
+            pmid = r['pmid']
+            population_mesh = minimap.get_unique_terms(r['population'])
+            interventions_mesh = minimap.get_unique_terms(r['interventions'])
+            outcomes_mesh = minimap.get_unique_terms(r['outcomes'])
+            
+            row = (json.dumps(population_mesh),
+                   json.dumps(interventions_mesh),
+                   json.dumps(outcomes_mesh),
+                   pmid)
+            
+            
+            
+            update_cur.execute("update pubmed_pico set population_mesh=(%s), interventions_mesh=(%s), outcomes_mesh=(%s) where pmid=(%s);",
+        row)
+            
+        dbutil.db.commit()
+
+    update_type = "picomesh_full" if force_refresh else "picomesh_partial" 
+    dbutil.log_update(update_type=update_type, source_date=datetime.datetime.now())
 
 
 
 
 def update():
     download_ftp_baseline()
+    download_ftp_updates(safety_test_parse=False)
+    compute_pico()
+    compute_pico_mesh()
