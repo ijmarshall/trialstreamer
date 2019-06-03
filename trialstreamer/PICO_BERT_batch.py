@@ -84,13 +84,13 @@ def map_all_in_db(force_refresh=False):
         records = read_cur.fetchall()
 
     log.info('calculating number of records to process')
-
+    total = len(records)
     
     batch_size = 100
 
     log.info('processing the BERTs!')
 
-    for batch in tqdm.tqdm(grouper(records, batch_size),  desc="articles processed for BERT embeddings"):
+    for batch in tqdm.tqdm(grouper(records, batch_size),  desc="articles processed for BERT embeddings", total=(total/batch_size)):
         
         for r in batch:           
             def filter_empty(snippets):
