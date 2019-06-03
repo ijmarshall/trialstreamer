@@ -1,10 +1,10 @@
 '''
 Code to generate PICO embeddings for articles in the RCT database in batch.
 '''
-
+import timeit
 import psycopg2
 import json 
-
+import sys
 from trialstreamer import dbutil, PICO_BERT_TF
 import trialstreamer
 
@@ -63,6 +63,7 @@ def map_all_in_db(force_refresh=False):
     This assumes that the pubmed_pico table has been modified to include
     vector columns.
     '''
+    print("creating BERT...")
 
     log.info('instantiating BERT')
     bert = PICO_BERT_TF.PICOBERT_TF()
@@ -85,7 +86,8 @@ def map_all_in_db(force_refresh=False):
 
     log.info('calculating number of records to process')
     total = len(records)
-    
+ 
+
     batch_size = 100
 
     log.info('processing the BERTs!')
