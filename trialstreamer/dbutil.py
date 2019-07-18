@@ -19,7 +19,7 @@ def make_tables():
             id serial primary key,
             pmid varchar(16) unique,
             pm_status varchar(32),
-            year varchar(8),
+            year integer,
             ti text,
             ab text,
             pm_data jsonb,
@@ -37,10 +37,34 @@ def make_tables():
             score_cnn_ptyp real,
             score_svm_ptyp real,
             score_svm_cnn_ptyp real,
+            rct_probability real,
             source_filename varchar(256)
             );
 
-create table if not exists pubmed_pico (
+            create table if not exists pubmed_excludes (
+            id serial primary key,
+            pmid varchar(16) unique,
+            pm_status varchar(32),
+            year integer,
+            ptyp_rct smallint,
+            indexing_method varchar(32),
+            is_rct_precise boolean,
+            is_rct_balanced boolean,
+            is_rct_sensitive boolean,
+            clf_type varchar(16),
+            clf_score real,
+            clf_date timestamp,
+            score_cnn real,
+            score_svm real,
+            score_svm_cnn real,
+            score_cnn_ptyp real,
+            score_svm_ptyp real,
+            score_svm_cnn_ptyp real,
+            rct_probability real,
+            source_filename varchar(256)
+            );
+
+create table if not exists pubmed_annotations (
     id serial primary key,
     pmid varchar(16) unique,
     population jsonb,
@@ -50,17 +74,18 @@ create table if not exists pubmed_pico (
     interventions_mesh jsonb,
     outcomes_mesh jsonb,
     num_randomized integer,
-    p_v float[],
-    i_v float[],
-    o_v float[]
+    population_berts float[],
+    interventions_berts float[],
+    outcomes_berts float[],
+    low_rsg_bias boolean,
+    low_ac_bias boolean,
+    low_bpp_bias boolean,
+    punchline_text text,
+    effect varchar(22)
 );
 
 
-                
-
-
-
-create index if not exists idx_pubmed_pico on pubmed_pico (pmid);
+create index if not exists idx_pubmed_annotations on pubmed_annotations (pmid);
 
 create index if not exists idx_is_rct_precise on pubmed (is_rct_precise)
     where is_rct_precise=true;
@@ -79,7 +104,7 @@ create table if not exists ictrp (
             id serial primary key,
             regid varchar(32) not null,
             ti text,
-            year varchar(8),
+            year integer,
             ictrp_data jsonb,
             source_filename varchar(256)
             );
@@ -132,9 +157,10 @@ create materialized view if not exists pubmed_year_counts AS
     select year,
         sum(case is_rct_precise when true then 1 else 0 end) as is_rct_precise,
         sum(case is_rct_balanced when true then 1 else 0 end) as is_rct_balanced,
-        sum(case is_rct_sensitive when true then 1 else 0 end) as is_rct_sensitive,
-        sum(case ptyp_rct when 1 then 1 else 0 end) as ptyp_rct
-from pubmed where is_rct_sensitive=true group by year;
+        count(*) as is_rct_sensitive,
+        sum(case ptyp_rct when 1 then 1 else 0 end) as ptyp_rct,
+        round(count(*) * avg(rct_probability)) as est_rct_count
+from pubmed where year >= 1948 group by year;
 
 
 

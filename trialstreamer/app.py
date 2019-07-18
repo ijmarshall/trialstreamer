@@ -15,10 +15,6 @@ from io import BytesIO as StringIO # py3
 app = Flask(__name__)
 
 
-
-
-
-
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
 
@@ -76,6 +72,12 @@ def rcts():
         breakdowns[r['year']]["balanced"] = r['is_rct_balanced']
         breakdowns[r['year']]["sensitive"] = r['is_rct_sensitive']
 
+    cur.execute("select year, count(*)*avg(rct_probability) as prob_count from pubmed group by year;")
+    records = cur.fetchall()
+    for r in records:
+        breakdowns[r['year']]["sensitive"] = r['prob_count']
+
+
 
     cur.execute("select sum(is_rct_precise) as is_rct_precise, sum(is_rct_balanced) as is_rct_balanced, sum(is_rct_sensitive) as is_rct_sensitive, sum(ptyp_rct) as ptyp_rct from pubmed_year_counts;")
     record = cur.fetchone()
@@ -116,7 +118,7 @@ def rcts():
     # breakdowns_ptyp.pop(None)
 
 
-    year_labels = [y for y in sorted(breakdowns.keys()) if int("0"+y) >= 1950 and int("0"+y) <=2019]
+    year_labels = [y for y in sorted(breakdowns.keys()) if y and y >= 1950 and y <=2019]
     datasets = []
 
     hide_on_load = [False, True, True, False, True, True]

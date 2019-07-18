@@ -106,7 +106,7 @@ def already_done_updates():
     already_done_files = set((r['source_filename'] for r in cur.fetchall()))
     return already_done_files
 
-def download_ftp_updates(safety_test_parse=True):
+def download_ftp_updates():
     """
     Grab the updates
 
@@ -135,6 +135,7 @@ def download_ftp_updates(safety_test_parse=True):
     download_and_validate_gzs(update_ftp_fns, updates=True)
     log.info("Uploading to postgres")
 
+    safety_test_parse = config.SAFETY_TEST_PARSE
     upload_to_postgres(update_ftp_fns, safety_test_parse=safety_test_parse, batch_size=5000, updates=True, modtimes=update_ftp_mod_times)
 
     log.info("Uploaded!")
@@ -339,7 +340,7 @@ def classify(entry_batch):
     for pred in preds:
         row = {"clf_type": pred["model"], "clf_score": pred['score'], "clf_date": datetime.datetime.now(), "ptyp_rct": pred['ptyp_rct'],
         "score_cnn": pred["preds"]["cnn"], "score_svm": pred["preds"]["svm"], "score_svm_cnn": pred["preds"]["svm_cnn"], "score_svm_ptyp": pred["preds"]["svm_ptyp"],
-        "score_cnn_ptyp": pred["preds"]["cnn_ptyp"], "score_svm_cnn_ptyp": pred["preds"]["svm_cnn_ptyp"]}
+        "score_cnn_ptyp": pred["preds"]["cnn_ptyp"], "score_svm_cnn_ptyp": pred["preds"]["svm_cnn_ptyp"], "rct_probability": pred["preds"]["probability"]}
 
         if pred["model"] == "svm_cnn_ptyp":
             for tt in threshold_types:
@@ -409,6 +410,8 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
             cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute("SELECT pmid FROM pubmed;")
             already_done_pmids = set((r['pmid'] for r in cur.fetchall()))
+            cur.execute("SELECT pmid FROM pubmed_excludes;")
+            already_done_pmids.update((r['pmid'] for r in cur.fetchall()))
             log.warning("will skip {} already done... rerun with 'force_update=True' to reclassify all".format(len(already_done_pmids)))
     else:
         already_done_pmids = set()
@@ -469,20 +472,34 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
             for entry, pred in zip(entry_batch, preds):
 
+                year = int(entry['year']) if entry['year'] else None
+
                 if pred['is_rct_sensitive']:
-                    row = (entry['pmid'], entry['status'], entry['year'], entry['title'], entry['abstract_plaintext'],
+                    row = (entry['pmid'], entry['status'], year, entry['title'], entry['abstract_plaintext'],
                         json.dumps(entry), ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
                         pred['is_rct_balanced'], pred['is_rct_sensitive'], entry['indexing_method'], pred['score_svm'], pred['score_cnn'], pred['score_svm_cnn'],
-                        pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'])
+                        pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'], pred['rct_probability'])
 
                     include_rows.append(row)
+                else:
+
+                    row = (entry['pmid'], entry['status'], year,
+                        ftp_fn, pred['clf_type'], pred['clf_score'], pred['clf_date'], pred['ptyp_rct'], pred['is_rct_precise'],
+                        pred['is_rct_balanced'], pred['is_rct_sensitive'], entry['indexing_method'], pred['score_svm'], pred['score_cnn'], pred['score_svm_cnn'],
+                        pred['score_svm_ptyp'], pred['score_cnn_ptyp'], pred['score_svm_cnn_ptyp'], pred['rct_probability'])
+                    exclude_rows.append(row)
 
             cur = dbutil. db.cursor()
             if updates:
                 for pm in pmids_to_delete:
                     cur.execute("DELETE FROM pubmed WHERE pmid=(%s);", (pm,))
+                    cur.execute("DELETE FROM pubmed_excludes WHERE pmid=(%s);", (pm,))
+                    cur.execute("DELETE FROM pubmed_annotations WHERE pmid=(%s);", (pm, ))
 
-            execute_values(cur, "INSERT INTO pubmed (pmid, pm_status, year, ti, ab, pm_data, source_filename, clf_type, clf_score, clf_date, ptyp_rct, is_rct_precise, is_rct_balanced, is_rct_sensitive, indexing_method, score_svm, score_cnn, score_svm_cnn, score_svm_ptyp, score_cnn_ptyp, score_svm_cnn_ptyp) VALUES %s ON CONFLICT (pmid) DO UPDATE SET year=EXCLUDED.year, ti=EXCLUDED.ti, ab=EXCLUDED.ab, pm_data=EXCLUDED.pm_data, source_filename=EXCLUDED.source_filename, clf_type=EXCLUDED.clf_type, clf_score=EXCLUDED.clf_score, clf_date=EXCLUDED.clf_date, ptyp_rct=EXCLUDED.ptyp_rct, is_rct_precise=EXCLUDED.is_rct_precise, is_rct_balanced=EXCLUDED.is_rct_balanced, is_rct_sensitive=EXCLUDED.is_rct_sensitive, indexing_method=EXCLUDED.indexing_method;", include_rows, template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+            execute_values(cur, "INSERT INTO pubmed (pmid, pm_status, year, ti, ab, pm_data, source_filename, clf_type, clf_score, clf_date, ptyp_rct, is_rct_precise, is_rct_balanced, is_rct_sensitive, indexing_method, score_svm, score_cnn, score_svm_cnn, score_svm_ptyp, score_cnn_ptyp, score_svm_cnn_ptyp, rct_probability) VALUES %s ON CONFLICT (pmid) DO UPDATE SET year=EXCLUDED.year, ti=EXCLUDED.ti, ab=EXCLUDED.ab, pm_data=EXCLUDED.pm_data, source_filename=EXCLUDED.source_filename, clf_type=EXCLUDED.clf_type, clf_score=EXCLUDED.clf_score, clf_date=EXCLUDED.clf_date, ptyp_rct=EXCLUDED.ptyp_rct, is_rct_precise=EXCLUDED.is_rct_precise, is_rct_balanced=EXCLUDED.is_rct_balanced, is_rct_sensitive=EXCLUDED.is_rct_sensitive, indexing_method=EXCLUDED.indexing_method, rct_probability=EXCLUDED.rct_probability;", include_rows, template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+
+
+            execute_values(cur, "INSERT INTO pubmed_excludes (pmid, pm_status, year, source_filename, clf_type, clf_score, clf_date, ptyp_rct, is_rct_precise, is_rct_balanced, is_rct_sensitive, indexing_method, score_svm, score_cnn, score_svm_cnn, score_svm_ptyp, score_cnn_ptyp, score_svm_cnn_ptyp, rct_probability) VALUES %s ON CONFLICT (pmid) DO UPDATE SET year=EXCLUDED.year, source_filename=EXCLUDED.source_filename, clf_type=EXCLUDED.clf_type, clf_score=EXCLUDED.clf_score, clf_date=EXCLUDED.clf_date, ptyp_rct=EXCLUDED.ptyp_rct, is_rct_precise=EXCLUDED.is_rct_precise, is_rct_balanced=EXCLUDED.is_rct_balanced, is_rct_sensitive=EXCLUDED.is_rct_sensitive, indexing_method=EXCLUDED.indexing_method, rct_probability=EXCLUDED.rct_probability;", exclude_rows, template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
 
             cur.close()
             dbutil.db.commit()
@@ -502,7 +519,7 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
 
 
-def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
+def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
     """
     compute picos links from all PubMed articles
     """
@@ -525,11 +542,11 @@ def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100
     if force_refresh:
         # deleting doi table from database
         log.info('deleting all PICO data from table...')
-        cur.execute('delete from pubmed_pico;')
+        cur.execute('delete from pubmed_annotations;')
         already_done_picos = set()
     else:
         log.info('getting list of all PICOs done so far...')
-        cur.execute("SELECT pmid FROM pubmed_pico;")
+        cur.execute("SELECT pmid FROM pubmed_annotations;")
         records = cur.fetchall()
         already_done_picos = set((r['pmid'] for r in records))
 
@@ -540,36 +557,45 @@ def compute_pico(force_refresh=False, limit_to='is_rct_balanced', batch_size=100
 
     log.info('PICO annotation in progress')
 
-    for r in tqdm.tqdm(grouper(records, batch_size), desc='articles annotated'):
+    for r in tqdm.tqdm(grouper(records, batch_size), desc='100s articles annotated'):
 
         r_f = [i for i in r if i['pmid'] not in already_done_picos]
 
         if r_f:
 
-            annotations = predict(r_f, tasks=['pico_span_bot', 'sample_size_bot'], filter_rcts='none')
+            annotations = predict(r_f, tasks=['pico_span_bot', 'sample_size_bot', 'bias_ab_bot', 'punchline_bot'], filter_rcts='none')
 
             for a in annotations:
 
 
                 sample_size = a.get('sample_size_bot', {}).get('num_randomized')
-                if sample_size == 'not found':
+                if sample_size == 'not found' or int(sample_size) > 1000000:
                     sample_size = None
 
-                cur.execute("INSERT INTO pubmed_pico (pmid, population, interventions, outcomes, num_randomized) VALUES (%s, %s, %s, %s, %s);",
+                cur.execute("INSERT INTO pubmed_annotations (pmid, population, interventions, outcomes, population_berts, interventions_berts, outcomes_berts, num_randomized, low_rsg_bias, low_ac_bias, low_bpp_bias, punchline_text, effect) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                     (a['pmid'],
                      json.dumps(a['pico_span_bot']['population']),
                      json.dumps(a['pico_span_bot']['interventions']),
                      json.dumps(a['pico_span_bot']['outcomes']),
-                     sample_size))
+                     a['pico_span_bot']['population_berts'],
+                     a['pico_span_bot']['interventions_berts'],
+                     a['pico_span_bot']['outcomes_berts'],
+                     sample_size,
+                     a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
+                     a['bias_ab_bot']['allocation_concealment']['judgement']=='low',
+                     a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
+                     a['punchline_bot']['punchline_text'],
+                     a['punchline_bot']['effect']
+                     ))
 
             dbutil.db.commit()
 
-    update_type = "picospan_full" if force_refresh else "picospan_partial" 
+    update_type = "picospan_full" if force_refresh else "picospan_partial"
     dbutil.log_update(update_type=update_type, source_date=datetime.datetime.now())
 
 
 
-def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
+def annotate_rcts_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
 
     log.warning("Computing PICO mesh terms")
 
@@ -584,46 +610,40 @@ def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_siz
         log.warning("Getting metadata for all articles with sensitive cutoff.."
                     "May take a long time...")
 
+    with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as read_cur, dbutil.db.cursor() as update_cur:
 
-    read_cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    update_cur = dbutil.db.cursor()
+        read_cur.itersize = 250 # batch size
+        update_cur.itersize = 250
 
-    if force_refresh:
-        # deleting doi table from database
-        log.info('redoing all PICO mesh terms...')
-        log.info('getting source data')
-        read_cur.execute("SELECT * FROM pubmed_pico;")
-        records = read_cur.fetchall()
-    else:
-        log.info('updating new records...')
-        log.info('getting source data')
-        read_cur.execute("SELECT * FROM pubmed_pico where (population_mesh is null) or (interventions_mesh is null) or (outcomes_mesh is null);")
-        records = read_cur.fetchall()
+        if force_refresh:
+            # deleting doi table from database
+            log.info('redoing all PICO mesh terms...')
+            log.info('getting source data')
+            read_cur.execute("SELECT pmid, population, interventions, outcomes FROM pubmed_annotations;")
+        else:
+            log.info('updating new records...')
+            log.info('getting source data')
+            read_cur.execute("SELECT pmid, population, interventions, outcomes FROM pubmed_annotations where (population_mesh is null) or (interventions_mesh is null) or (outcomes_mesh is null);")
 
 
-    batch_size = 100
+        for r in tqdm.tqdm(read_cur, desc='articles annotated'):
 
-    for batch in tqdm.tqdm(grouper(records, batch_size), desc='articles annotated'):
-        
-        for r in batch:
             pmid = r['pmid']
             population_mesh = minimap.get_unique_terms(r['population'])
             interventions_mesh = minimap.get_unique_terms(r['interventions'])
             outcomes_mesh = minimap.get_unique_terms(r['outcomes'])
-            
+
             row = (json.dumps(population_mesh),
                    json.dumps(interventions_mesh),
                    json.dumps(outcomes_mesh),
                    pmid)
-            
-            
-            
-            update_cur.execute("update pubmed_pico set population_mesh=(%s), interventions_mesh=(%s), outcomes_mesh=(%s) where pmid=(%s);",
-        row)
-            
-        dbutil.db.commit()
 
-    update_type = "picomesh_full" if force_refresh else "picomesh_partial" 
+            update_cur.execute("update pubmed_annotations set population_mesh=(%s), interventions_mesh=(%s), outcomes_mesh=(%s) where pmid=(%s);",
+            row)
+
+            dbutil.db.commit()
+
+    update_type = "picomesh_full" if force_refresh else "picomesh_partial"
     dbutil.log_update(update_type=update_type, source_date=datetime.datetime.now())
 
 
@@ -632,5 +652,5 @@ def compute_pico_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_siz
 def update():
     download_ftp_baseline()
     download_ftp_updates(safety_test_parse=False)
-    compute_pico()
-    compute_pico_mesh()
+    annotate_rcts()
+    annotate_rcts_mesh()
