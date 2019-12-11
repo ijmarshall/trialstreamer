@@ -91,11 +91,23 @@ def get_lemma(t):
 
 # pipelines
 
-def minimap(text_str, chunks=False):
-    return matcher(pipeline(text_str, umls_mode=False), chunks=chunks)
+def minimap(text_str, chunks=False, abbrevs=None):
+    return matcher(pipeline(text_str, umls_mode=False, abbrevs=abbrevs), chunks=chunks)
 
 
-def pipeline(text_str, umls_mode=True):
+def pipeline(text_str, umls_mode=True, abbrevs=None):
+
+    # sub out abbreviations if abbreviation dict given
+    if abbrevs:
+        for abbrev, expansion in abbrevs.items():
+            try:
+                text_str = re.sub(r"\b" + re.escape(abbrev) + r"\b", expansion, text_str)
+
+            except:
+                print(f"Regex error caused for one abstract! (for text string '{text_str}')")
+                print(f"and abbreviation dictionary '{abbrevs}'")
+                # to avoid weird errors in abbreviations generating error causing regex strings (which are not causing a named exception)
+                continue
 
     # 1. removal of parentheticals
     #     if umls_mode:
@@ -137,11 +149,13 @@ def matcher(text, chunks=False):
     max_len = len(doc)
     window = max_len
 
+
     while window:
 
         for i in range(max_len - window + 1):
             window_text = ' '.join(tokens[i:i+window])
             window_lemma = ' '.join(lemmas[i:i+window])
+
 
             if window_lemma and window_lemma in str_to_cui and window_lemma not in ignores and window_text \
                 not in nlp.Defaults.stop_words:
@@ -173,9 +187,9 @@ def matcher(text, chunks=False):
     return filtered_terms
 
 
-def get_unique_terms(l):
+def get_unique_terms(l, abbrevs=None):
     
-    terms = [minimap(s) for s in l]
+    terms = [minimap(s, abbrevs=abbrevs) for s in l]
     flat_terms = [item for sublist in terms for item in sublist]
     encountered_terms = set()
     unique_terms = []

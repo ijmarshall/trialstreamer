@@ -6,7 +6,6 @@
 from trialstreamer import dbutil, config
 from robotdata.readers import pmreader
 import trialstreamer
-import boto3
 import logging
 import os
 import re
@@ -28,7 +27,7 @@ from psycopg2.extras import execute_values
 import requests
 import time
 from trialstreamer import minimap
-
+from trialstreamer import schwartz_hearst
 
 
 
@@ -53,7 +52,9 @@ def get_ftp():
     log in to FTP and pass back
     """
     ftp = ftplib.FTP(homepage)
-    ftp.login(user="anonymous", passwd=config.PUBMED_USER_EMAIL)
+    print(ftp.login(user="anonymous", passwd=config.PUBMED_USER_EMAIL))
+    print(ftp.set_pasv(False))
+
     return ftp
 
 def get_baseline_fns():
@@ -76,6 +77,16 @@ def get_daily_update_mod_times(update_fns):
         out[os.path.basename(fn)] = parser.parse(ftp.sendcmd('MDTM {}'.format(fn))[4:].strip())
     return out
 
+def get_daily_update_fn_and_times():
+    ftp = get_ftp()
+    filelist = ftp.mlsd('pubmed/updatefiles/')
+    update_fns, modtimes = [], {}
+
+    for r in filelist:
+        if r[0].endswith('.gz'):
+            update_fns.append(os.path.join('pubmed/updatefiles/', r[0]))
+            modtimes[r[0]] = parser.parse(r[1]['modify'])
+    return update_fns, modtimes
 
 def already_done_md5s(updates=False):
     """
@@ -118,8 +129,11 @@ def download_ftp_updates():
 
     # download all available update files
 
-    update_ftp_fns = get_daily_update_fns()
-    update_ftp_mod_times = get_daily_update_mod_times(update_ftp_fns)
+    log.info('getting the filenames and times')
+    update_ftp_fns, update_ftp_mod_times = get_daily_update_fn_and_times()
+    # log.info('getting the file dates')
+    # update_ftp_mod_times = get_daily_update_mod_times(update_ftp_fns)
+
     log.info("{} PubMed title/abstract update files on FTP server".format(len(update_ftp_fns)))
     log.info("Checking hashfiles, and downloading any missing")
 
@@ -139,8 +153,8 @@ def download_ftp_updates():
     upload_to_postgres(update_ftp_fns, safety_test_parse=safety_test_parse, batch_size=5000, updates=True, modtimes=update_ftp_mod_times)
 
     log.info("Uploaded!")
-    log.info("Refreshing counts")
-    update_counts()
+    # log.info("Refreshing counts")
+    # update_counts()
     log.info("All done successfully!")
 
 
@@ -186,8 +200,8 @@ def download_ftp_baseline(force_update=False):
     log.info("Uploading to postgres")
     upload_to_postgres(baseline_ftp_fns, safety_test_parse, force_update=force_update)
     log.info("Uploaded!")
-    log.info("Refreshing counts")
-    update_counts()
+    # log.info("Refreshing counts")
+    # update_counts()
     log.info("All done successfully!")
 
     dbutil.log_update(update_type='pubmed_baseline', source_filename=os.path.basename(baseline_ftp_fns[0])[:8], source_date=get_date_from_fn(baseline_ftp_fns[0]), download_date=download_date)
@@ -610,6 +624,15 @@ def annotate_rcts_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_si
         log.warning("Getting metadata for all articles with sensitive cutoff.."
                     "May take a long time...")
 
+    # first get abbreviation dictionaries
+
+    log.info("Calculating abbreviation dictionaries")
+    abbrev_dicts = {}
+    with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pmsscursor") as read_cur:
+        read_cur.execute("SELECT pmid, ab FROM pubmed where is_rct_balanced=true;")
+        for r in tqdm.tqdm(read_cur, 'generating abstract-specific abbreviation expansions'):
+            abbrev_dicts[r['pmid']] = schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=r['ab'])
+
     with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as read_cur, dbutil.db.cursor() as update_cur:
 
         read_cur.itersize = 250 # batch size
@@ -629,9 +652,9 @@ def annotate_rcts_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_si
         for r in tqdm.tqdm(read_cur, desc='articles annotated'):
 
             pmid = r['pmid']
-            population_mesh = minimap.get_unique_terms(r['population'])
-            interventions_mesh = minimap.get_unique_terms(r['interventions'])
-            outcomes_mesh = minimap.get_unique_terms(r['outcomes'])
+            population_mesh = minimap.get_unique_terms(r['population'], abbrevs=abbrev_dicts[pmid])
+            interventions_mesh = minimap.get_unique_terms(r['interventions'], abbrevs=abbrev_dicts[pmid])
+            outcomes_mesh = minimap.get_unique_terms(r['outcomes'], abbrevs=abbrev_dicts[pmid])
 
             row = (json.dumps(population_mesh),
                    json.dumps(interventions_mesh),
@@ -651,6 +674,6 @@ def annotate_rcts_mesh(force_refresh=False, limit_to='is_rct_balanced', batch_si
 
 def update():
     download_ftp_baseline()
-    download_ftp_updates(safety_test_parse=False)
+    download_ftp_updates()
     annotate_rcts()
     annotate_rcts_mesh()

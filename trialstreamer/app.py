@@ -8,6 +8,8 @@ import humanize
 import json
 import psycopg2
 from collections import defaultdict
+import pickle
+import pygtrie
 from flask import jsonify
 from io import BytesIO as StringIO # py3
 
@@ -18,10 +20,34 @@ app = Flask(__name__)
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
 
+with open('/home/iain/Code/trialstreamer/trialstreamer/data/pico_mesh_autocompleter.pck', 'rb') as f:
+    pico_trie = pickle.load(f)
+
 
 @app.route('/')
 def hello_world():
     return 'trialstreamer :)'
+
+
+@app.route('/pico_term_lookup')
+def pico_term_lookup():
+    """
+    retrieves most likely MeSH PICO terms for the demo
+    """
+    min_char = 3
+    max_return = 5
+    substr = request.args.get('q')
+    if substr is None:
+        return jsonify([])
+
+    matches = pico_trie.itervalues(prefix=substr)
+
+    if len(substr) < min_char:
+        # for short ones just return first 5
+        return jsonify([r for _, r in zip(range(max_return), matches)])
+    else:
+        # where we have enough chars, process and get top ranked
+        return jsonify(sorted(matches, key=lambda x: x['count'], reverse=True)[:max_return])
 
 
 @app.route('/status')
@@ -64,7 +90,7 @@ def rcts():
 
     breakdowns = defaultdict(dict)
 
-    cur.execute("select * from pubmed_year_counts order by year;")    
+    cur.execute("select * from pubmed_year_counts order by year;")
     records = cur.fetchall()
     for r in records:
         breakdowns[r['year']]["PubMed PT tag"] = r['ptyp_rct']
@@ -85,7 +111,7 @@ def rcts():
     totals.append({"count": record['is_rct_balanced'], "threshold_type": "balanced"})
     totals.append({"count": record['is_rct_sensitive'], "threshold_type": "sensitive"})
     totals.append({"count": record['ptyp_rct'], "threshold_type": "PubMed PT tag"})
-        
+
 
 
 
