@@ -64,7 +64,8 @@ def pico_mesh_query():
     gets up to 10 articles matching a structured PICO query
     """
     query = request.get_json('q')
-    if query is [] or query is None:
+    print(f"QUERY IS {query}")
+    if query == [] or query is None:
         return jsonify([])
 
     builder = []
@@ -86,8 +87,6 @@ def pico_mesh_query():
         cur.execute(select + params + join)
         for i, row in enumerate(cur):
             out.append({"pmid": row['pmid'], "ti": row['ti']})
-            if i>5:
-                break
 
     return jsonify(out)
 
