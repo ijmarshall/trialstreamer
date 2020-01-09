@@ -5,22 +5,28 @@ import trialstreamer
 import datetime
 import os
 import humanize
-import json
+from flask import json
 import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import Json
 from collections import defaultdict
 import pickle
 import pygtrie
 from flask import jsonify
 from io import BytesIO as StringIO # py3
 
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
+
+
 
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
 
-with open('/home/iain/Code/trialstreamer/trialstreamer/data/pico_mesh_autocompleter.pck', 'rb') as f:
+with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_mesh_autocompleter.pck'), 'rb') as f:
     pico_trie = pickle.load(f)
 
 
@@ -50,6 +56,52 @@ def pico_term_lookup():
         return jsonify(sorted(matches, key=lambda x: x['count'], reverse=True)[:max_return])
 
 
+
+
+@app.route('/pico_mesh_query', methods=["POST"])
+def pico_mesh_query():
+    """
+    gets up to 10 articles matching a structured PICO query
+    """
+    query = request.get_json('q')
+    if query is [] or query is None:
+        return jsonify([])
+
+    builder = []
+
+    for c in query:
+        assert c['classes'] in ['population', 'interventions', 'outcomes']
+        field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['classes']}_mesh")))
+        contents = sql.Literal(Json([{"mesh_ui": c['mesh_ui']}])                           )
+        builder.append(sql.SQL(' @> ').join((field, contents)))
+
+    params = sql.SQL(' AND ').join(builder)
+
+    select = sql.SQL("SELECT pm.pmid, pm.ti FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+    join = sql.SQL("AND pm.pmid = pa.pmid")
+                                                                        
+    out = []
+                                                                        
+    with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+        cur.execute(select + params + join)
+        for i, row in enumerate(cur):
+            out.append({"pmid": row['pmid'], "ti": row['ti']})
+            if i>5:
+                break
+
+    return jsonify(out)
+
+# @app.route('/query')
+# def query():
+#     """
+#     emulated PubMed-style boolean query
+#     """
+#     # still to improve!!
+
+#     q = request.args.get('q', '')
+#     q = pmquery_to_postgres(q)
+
+
 @app.route('/status')
 def status():
     """
@@ -66,6 +118,9 @@ def status():
             out.append(lu)
 
     return render_template('status.html', results=out)
+
+
+# @app.route('/query')
 
 
 @app.route('/rcts')
@@ -184,31 +239,31 @@ def db_dump():
                      as_attachment=True)
 
 
-def pmquery_to_postgres(s):
-    s = s.replace(' and ', ' & ')
-    s = s.replace(' AND ', ' & ')
-    s = s.replace(' or ', ' | ')
-    s = s.replace(' OR ', ' | ')
-    return s
+# def pmquery_to_postgres(s):
+#     s = s.replace(' and ', ' & ')
+#     s = s.replace(' AND ', ' & ')
+#     s = s.replace(' or ', ' | ')
+#     s = s.replace(' OR ', ' | ')
+#     return s
 
-@app.route('/query')
-def query():
-    """
-    emulated PubMed-style boolean query
-    """
-    # still to improve!!
+# @app.route('/query')
+# def query():
+#     """
+#     emulated PubMed-style boolean query
+#     """
+#     # still to improve!!
 
-    q = request.args.get('q', '')
-    q = pmquery_to_postgres(q)
+#     q = request.args.get('q', '')
+#     q = pmquery_to_postgres(q)
 
 
-    threshold_type = request.args.get('threshold_type', 'balanced')
-    start = int(request.args.get('start', 0))
-    end = int(request.args.get('end', start+10))
-    cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT pm_data FROM pubmed WHERE ti @@ to_tsquery(%s) limit %s offset %s;", (q, end-start, int(start)))
-    records = cur.fetchall()
-    return jsonify(records)
+#     threshold_type = request.args.get('threshold_type', 'balanced')
+#     start = int(request.args.get('start', 0))
+#     end = int(request.args.get('end', start+10))
+#     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+#     cur.execute("SELECT pm_data FROM pubmed WHERE ti @@ to_tsquery(%s) limit %s offset %s;", (q, end-start, int(start)))
+#     records = cur.fetchall()
+#     return jsonify(records)
 
 
 @app.route('/get')
