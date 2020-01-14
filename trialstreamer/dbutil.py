@@ -25,6 +25,7 @@ def make_tables():
             pm_data jsonb,
             ptyp_rct smallint,
             indexing_method varchar(32),
+            is_human boolean,
             is_rct_precise boolean,
             is_rct_balanced boolean,
             is_rct_sensitive boolean,
