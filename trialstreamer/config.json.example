@@ -12,6 +12,7 @@
         "mendeley_id": "",
         "mendeley_secret": "",
         "robotreviewer_url": "http://localhost:5051/",
-        "robotreviewer_api_key": "key goes here"
+        "api_keys": {"keys go here":
+                {"uid": 1}}
 	}
 }
