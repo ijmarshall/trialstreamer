@@ -1,4 +1,3 @@
-from trialstreamer import app
 
-
-app.main()
+from trialstreamer import cnxapp
+cnxapp.app.run()
