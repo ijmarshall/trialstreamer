@@ -11,6 +11,7 @@
         "safety_test_parse": false,
         "mendeley_id": "",
         "mendeley_secret": "",
-        "robotreviewer_url": "http://localhost:5051/"
+        "robotreviewer_url": "http://localhost:5051/",
+        "robotreviewer_api_key": "key goes here"
 	}
 }
