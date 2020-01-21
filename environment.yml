@@ -1,0 +1,59 @@
+name: trialstreamer
+channels:
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=main
+  - ca-certificates=2019.11.27=0
+  - certifi=2019.11.28=py36_0
+  - cffi=1.13.2=py36h2e261b9_0
+  - click=7.0=py36_0
+  - flask=1.1.1=py_0
+  - flask-cors=3.0.8=py_0
+  - gevent=1.4.0=py36h7b6447c_0
+  - greenlet=0.4.15=py36h7b6447c_0
+  - humanize=0.5.1=py36_1
+  - itsdangerous=1.1.0=py36_0
+  - jinja2=2.10.3=py_0
+  - krb5=1.16.4=h173b8e3_0
+  - ld_impl_linux-64=2.33.1=h53a641e_7
+  - libedit=3.1.20181209=hc058e9b_0
+  - libffi=3.2.1=hd88cf55_4
+  - libgcc-ng=9.1.0=hdf63c60_0
+  - libpq=11.2=h20c2e04_0
+  - libstdcxx-ng=9.1.0=hdf63c60_0
+  - markupsafe=1.1.1=py36h7b6447c_0
+  - ncurses=6.1=he6710b0_1
+  - openssl=1.1.1d=h7b6447c_3
+  - pip=19.3.1=py36_0
+  - psycopg2=2.8.4=py36h1ba5d50_0
+  - pycparser=2.19=py36_0
+  - python=3.6.10=h0371630_0
+  - readline=7.0=h7b6447c_5
+  - setuptools=44.0.0=py36_0
+  - six=1.13.0=py36_0
+  - sqlite=3.30.1=h7b6447c_0
+  - tk=8.6.8=hbc83047_0
+  - werkzeug=0.16.0=py_0
+  - wheel=0.33.6=py36_0
+  - xz=5.2.4=h14c3975_4
+  - zlib=1.2.11=h7b6447c_3
+  - pip:
+    - attrs==19.3.0
+    - chardet==3.0.4
+    - clickclick==1.2.2
+    - connexion==2.5.1
+    - idna==2.8
+    - importlib-metadata==1.4.0
+    - inflection==0.3.1
+    - jsonschema==3.2.0
+    - more-itertools==8.1.0
+    - openapi-spec-validator==0.2.8
+    - pygtrie==2.3.2
+    - pyrsistent==0.15.7
+    - pyyaml==5.3
+    - requests==2.22.0
+    - swagger-ui-bundle==0.0.6
+    - urllib3==1.25.8
+    - zipp==2.0.0
+prefix: /home/iain/anaconda3/envs/trialstreamer
+
