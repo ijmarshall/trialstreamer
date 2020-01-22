@@ -1,0 +1,262 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "Trialstreamer API",
+        "version": "1.0",
+        "description": "Trialstreamer is a living database of annoated RCT reports. The database is updated daily from PubMed, and all new RCTs retrieved. These articles are then automatically annotated with key meta-data (e.g. sample size, risks of bias, PICOs) by RobotReviewer.\n\n",
+        "contact": {
+            "name": "Iain Marshall",
+            "url": "https://ijmarshall.com",
+            "email": "mail@ijmarshall.com"
+        },
+        "license": {
+            "name": "GPL-3.0"
+        }
+    },
+    "host": "trialstreamer.robotreviewer.net",
+    "paths": {
+        "/autocomplete": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "examples": {
+                            "application/json": [
+                                {
+                                    "field": "population",
+                                    "mesh_code": "A6",
+                                    "mesh_term": "ex dolore dolor est in"
+                                },
+                                {
+                                    "field": "population",
+                                    "mesh_code": "K64",
+                                    "mesh_term": "in voluptate culpa"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "summary": "Suggests MeSH terms and PICOs from free-text query stem",
+                "operationId": "trialstreamer.cnxapp.autocomplete",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "type": "string"
+                    }
+                ],
+                "tags": [
+                    "queries"
+                ],
+                "description": "For use in autocomplete query builder. Accepts a query stem (as a `q` query parameter), and returns the 10 (max) most likely matches of structured vocabulary terms. The suggestions are automatically compiled from those used in practice in the Trialstreamer database, and presented in order from most likely to least likely."
+            }
+        },
+        "/picosearch": {
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/article-short"
+                            }
+                        },
+                        "examples": {
+                            "application/json": [
+                                {
+                                    "pmid": "30629285",
+                                    "ti": "Intravenous metoclopramide in the treatment of acute migraines: A randomized, placebo-controlled trial."
+                                },
+                                {
+                                    "pmid": "18315508",
+                                    "ti": "\"Playing their parts\": the experiences of participants in a randomized sham-controlled acupuncture trial."
+                                },
+                                {
+                                    "pmid": "30853645",
+                                    "ti": "Efficacy of Anise (Pimpinella anisum L.) oil for migraine headache: A pilot randomized placebo-controlled clinical trial."
+                                },
+                                {
+                                    "pmid": "24467625",
+                                    "ti": "Gender differences of cognitive function in migraine patients: evidence from event-related potentials using the oddball paradigm."
+                                },
+                                {
+                                    "pmid": "26125257",
+                                    "ti": "Efficacy of type a botulinum toxin injections and infrared polarized light on treating chronic migraine."
+                                },
+                                {
+                                    "pmid": "19261951",
+                                    "ti": "Comment: pharmaceutical care for migraine and headache patients: a community-based, randomized intervention."
+                                },
+                                {
+                                    "pmid": "4838915",
+                                    "ti": "Effect of chocolate in migraine: a double-blind study."
+                                }
+                            ]
+                        }
+                    }
+                },
+                "summary": "search Trialstreamer DB for RCTs matching PICO criteria",
+                "description": "Searches the database for articles matching a PICO-structured query.",
+                "operationId": "trialstreamer.cnxapp.picosearch",
+                "tags": [
+                    "queries"
+                ],
+                "security": [
+                    {
+                        "trialstreamer-auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "terms": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/definitions/pico-terms"
+                                    }
+                                },
+                                "retmode": {
+                                    "type": "string",
+                                    "enum": [
+                                        "ris",
+                                        "json",
+                                        "json_short"
+                                    ]
+                                }
+                            }
+                        },
+                        "x-examples": {
+                            "application/json": [
+                                {
+                                    "field": "population",
+                                    "mesh_code": "D008881"
+                                },
+                                {
+                                    "field": "interventions",
+                                    "mesh_code": "D001241"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "schemes": [
+        "https"
+    ],
+    "consumes": [
+        "application/json"
+    ],
+    "produces": [
+        "application/json"
+    ],
+    "securityDefinitions": {
+        "trialstreamer-auth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "api-key",
+            "description": "An API key is required to access Trialstreamer. Please email mail@ijmarshall.com for details.",
+            "x-apikeyInfoFunc": "trialstreamer.cnxapp.auth"
+        }
+    },
+    "security": [
+        {
+            "trialstreamer-auth": []
+        }
+    ],
+    "definitions": {
+        "pico-terms": {
+            "type": "object",
+            "title": "PICO structured terms",
+            "description": "Consists of two parts: a structured vocabulary term (currently MeSH) as UI, and the field (`population`, `interventions`, or `outcomes`) that it describes. Optionally includes the text descriptor of the MeSH code.",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "enum": [
+                        "population",
+                        "interventions",
+                        "outcomes"
+                    ]
+                },
+                "mesh_ui": {
+                    "type": "string",
+                    "pattern": "[A-Z][0-9]+"
+                },
+                "mesh_term": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "field",
+                "mesh_ui"
+            ]
+        },
+        "article-short": {
+            "type": "object",
+            "title": "Article (short)",
+            "description": "Short article representation",
+            "properties": {
+                "pmid": {
+                    "type": "string",
+                    "maxLength": 9,
+                    "pattern": "[0-9]+"
+                },
+                "ti": {
+                    "type": "string"
+                },
+                "year": {
+                    "type": "string",
+                    "maxLength": 4,
+                    "pattern": "[0-9]+"
+                }
+            },
+            "required": [
+                "pmid",
+                "ti",
+                "year"
+            ]
+        },
+        "pico-terms-counts": {
+            "type": "object",
+            "title": "PICO structured terms with counts",
+            "description": "Same as the PICO structured terms, but also shows counts in the database to allow ranking.",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "enum": [
+                        "population",
+                        "interventions",
+                        "outcomes"
+                    ]
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "mesh_ui": {
+                    "type": "string",
+                    "pattern": "[A-Z][0-9]+"
+                },
+                "mesh_term": {
+                    "type": "string"
+                },
+                "mesh_pico_display": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "queries"
+        }
+    ]
+}
