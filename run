@@ -1,0 +1,6 @@
+#!/bin/sh
+export DEV false
+export DEBUG false
+cd /var/lib/deploy/ && nohup python /var/lib/deploy/server.py &
+sleep infinity
+

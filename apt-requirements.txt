@@ -1,0 +1,8 @@
+software-properties-common
+openssl
+aria2
+ca-certificates
+unzip
+wget
+git
+sudo
