@@ -8,7 +8,8 @@ import psycopg2.extras
 import datetime
 
 db = psycopg2.connect(dbname=config.POSTGRES_DB, user=config.POSTGRES_USER,
-                      host='localhost', password=config.POSTGRES_PASS)
+                      host=config.POSTGRES_IP, password=config.POSTGRES_PASS,
+                      port=config.POSTGRES_PORT)
 
 
 def make_tables():

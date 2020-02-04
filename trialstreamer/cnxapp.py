@@ -58,6 +58,8 @@ def picosearch(body):
     """
     query = body['terms']
 
+    if len(query)==0:
+        return jsonify([])
     retmode = body.get("retmode", "json-short")
     print(retmode)
 
@@ -73,23 +75,26 @@ def picosearch(body):
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.year FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid")
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true")
 
     out = []
 
-    with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
-        cur.execute(select + params + join)
-        for i, row in enumerate(cur):
-            if retmode=='json-short':
-                out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year']})
-            elif retmode=='ris':
-                out.append(OrderedDict([("TY", "JOUR"),
-                                        ("DB", "Trialstreamer"),
-                                        ("ID", row['pmid']),
-                                        ("TI", row['ti']),
-                                        ("YR", row['year']),
-                                        ("JO", row['journal']),
-                                        ("AB", row['ab'])]))
+    with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
+           host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
+           port=trialstreamer.config.POSTGRES_PORT) as db:
+        with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+            cur.execute(select + params + join)
+            for i, row in enumerate(cur):
+                if retmode=='json-short':
+                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year']})
+                elif retmode=='ris':
+                    out.append(OrderedDict([("TY", "JOUR"),
+                                            ("DB", "Trialstreamer"),
+                                            ("ID", row['pmid']),
+                                            ("TI", row['ti']),
+                                            ("YR", row['year']),
+                                            ("JO", row['journal']),
+                                            ("AB", row['ab'])]))
 
     if retmode=='json-short':
         return jsonify(out)
@@ -104,49 +109,7 @@ def picosearch(body):
 
 
 
-def pico_mesh_query_download(q):
-    """
-    gets brief display info for articles matching a structured PICO query
-    """
-    query = q
-    if query == [] or query is None:
-        return jsonify([])
-
-    builder = []
-
-    for c in query:
-        field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))
-        contents = sql.Literal(Json([{"mesh_ui": c['mesh_ui']}])                           )
-        builder.append(sql.SQL(' @> ').join((field, contents)))
-
-    params = sql.SQL(' AND ').join(builder)
-
-    select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid")
-
-    out = []
-
-    with dbutil.db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
-        cur.execute(select + params + join)
-        for i, row in enumerate(cur):
-            out.append(OrderedDict([("TY", "JOUR"),
-                                    ("DB", "Trialstreamer"),
-                                    ("ID", row['pmid']),
-                                    ("TI", row['ti']),
-                                    ("YR", row['year']),
-                                    ("JO", row['journal']),
-                                    ("AB", row['ab'])]))
-    report = ris.dumps(out)
-    strIO = StringIO()
-    strIO.write(report.encode('utf-8')) # need to send as a bytestring
-    strIO.seek(0)
-    return send_file(strIO,
-                     attachment_filename="trialstreamer.ris",
-                     as_attachment=True)
-
-
-
 import connexion
-app = connexion.FlaskApp(__name__, specification_dir='api/', port=5000, server='gevent')
+app = connexion.FlaskApp(__name__, specification_dir='api/', port=trialstreamer.config.TS_PORT, server='gevent')
 app.add_api('trialstreamer_api.yml')
 CORS(app.app)
