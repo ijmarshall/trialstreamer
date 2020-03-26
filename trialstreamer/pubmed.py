@@ -51,7 +51,7 @@ def get_ftp():
     """
     ftp = ftplib.FTP(homepage)
     print(ftp.login(user="anonymous", passwd=config.PUBMED_USER_EMAIL))
-    print(ftp.set_pasv(False))
+    # ftp.set_pasv(False)
 
     return ftp
 
