@@ -1,0 +1,3 @@
+[submodule "trialstreamer/ictrp-retrieval"]
+	path = trialstreamer/ictrp-retrieval
+	url = git@github.com:gertvv/ictrp-retrieval.git

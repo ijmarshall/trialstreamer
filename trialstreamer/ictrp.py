@@ -94,19 +94,20 @@ def check_if_new_data():
 
 
 def download_s3(fn):
-    local_target = os.path.join(trialstreamer.DATA_ROOT, 'ictrp', fn)
+    local_target = os.path.join(config.ICTRP_DATA_PATH, fn)
     bucket.download_file(fn, local_target)
     return local_target
 
 def parse_file(fn):
-    cmd = "{} {}".format(os.path.join(config.ICTRP_RETRIEVAL_PATH, 'parse.py'), fn)
+    cmd = "{} {}".format(os.path.join(trialstreamer._ROOT, config.ICTRP_RETRIEVAL_PATH, 'parse.py'), fn)
+    print(cmd)
     with open('test.log', 'wb') as f:
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True, cwd=config.ICTRP_RETRIEVAL_PATH)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True, cwd=os.path.join(trialstreamer._ROOT, config.ICTRP_RETRIEVAL_PATH))
         for line in tqdm.tqdm(iter(process.stdout.readline, b'')):  # replace '' with b'' for Python 3
             yield json.loads(line.decode('utf-8'))
 
 def upload_to_postgres(fn):
-    cur = dbutil. db.cursor()
+    cur = dbutil.db.cursor()
     cur.execute("DELETE FROM ictrp;")
 
     for entry in tqdm.tqdm(parse_file(fn), desc="parsing ICTRP entries"):
@@ -123,7 +124,7 @@ def add_year():
     add the year information for record creation
     """
     cur = dbutil. db.cursor()
-    cur.execute("update ictrp set year=left(ictrp_data->>'date_registered', 4);")
+    cur.execute("update ictrp set year=left(ictrp_data->>'date_registered', 4)::int;")
     cur.close()
     dbutil.db.commit()
 
@@ -149,9 +150,9 @@ def upload_old_file(local_fn, force_update=False):
     if force_update==False:
         log.warning('This will delete the existing ICTRP database. Please run with force_update=True to continue.')
         return None
-    local_fn = os.path.join(trialstreamer.DATA_ROOT, 'ictrp', local_fn)
+    local_fn = os.path.join(config.ICTRP_DATA_PATH, local_fn)
     download_date = datetime.datetime.now()
-    loglog.info('Parsing to postgres {}'.format(local_fn))
+    log.info('Parsing to postgres {}'.format(local_fn))
     upload_to_postgres(local_fn)
     # dbutil.log_update(update_type='ictrp', source_filename=local_fn, source_date=get_date_from_ictrp_fn(local_fn), download_date=download_date)
     log.info('adding year of record creation information')

@@ -26,6 +26,8 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_mesh_autocompleter.pck'), 
 
 
 def auth(api_key, required_scopes):
+    print(trialstreamer.config.API_KEYS)
+    print(api_key)
     info = trialstreamer.config.API_KEYS.get(api_key, None)
     if not info:
         raise OAuthProblem('Invalid token')
@@ -72,7 +74,7 @@ def picosearch(body):
 
     params = sql.SQL(' AND ').join(builder)
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.year FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.year, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true")
@@ -86,7 +88,7 @@ def picosearch(body):
             cur.execute(select + params + join)
             for i, row in enumerate(cur):
                 if retmode=='json-short':
-                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year']})
+                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text']})
                 elif retmode=='ris':
                     out.append(OrderedDict([("TY", "JOUR"),
                                             ("DB", "Trialstreamer"),
