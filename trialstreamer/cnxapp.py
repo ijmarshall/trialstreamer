@@ -32,7 +32,7 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'mesh_subtrees.pck'), 'rb') as f
 
 def get_subtree(mesh_ui):
     try:        
-        decs = nx.descendants(tree, mesh_ui)
+        decs = nx.descendants(subtrees, mesh_ui)
     except nx.exception.NetworkXError:
         return set([mesh_ui])
     decs.add(mesh_ui)
@@ -72,6 +72,8 @@ def picosearch(body):
     gets brief display info for articles matching a structured PICO query
     """
     query = body['terms']
+    
+    expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
         return jsonify([])
@@ -80,18 +82,33 @@ def picosearch(body):
     builder = []
 
     for c in query:
-        field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))
-        contents = sql.Literal(Json([{"mesh_ui": c['mesh_ui']}])                           )
-        builder.append(sql.SQL(' @> ').join((field, contents)))
-
+        
+        if expand_terms:
+            expansion = get_subtree(c['mesh_ui']) 
+        else:
+            expansion = [c['mesh_ui']]
+                
+        subtree_builder = []
+        
+        for c_i in expansion:
+            
+            field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))                                                                        
+            contents = sql.Literal(Json([{"mesh_ui": c_i}])                           )
+            subtree_builder.append(sql.SQL(' @> ').join((field, contents)))
+                                                                                                                                                                
+        builder.append(sql.SQL('(') + sql.SQL(' OR ').join(subtree_builder) + sql.SQL(')'))
+    
     params = sql.SQL(' AND ').join(builder)
+                                                                                                                                                    
     if retmode=='json-short':
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true AND pm.is_human=true;")
-
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true AND pm.is_human=true LIMIT 250;")
+                                                                            
     out = []
+
+
 
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
