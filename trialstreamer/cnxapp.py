@@ -14,9 +14,12 @@ import pickle
 from flask import jsonify
 from io import BytesIO as StringIO  # py3
 import connexion
+import networkx as nx
 from connexion.exceptions import OAuthProblem
 from flask_cors import CORS
 from flask import send_file
+from trialstreamer import schwartz_hearst
+            
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
@@ -24,6 +27,16 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
 with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_mesh_autocompleter.pck'), 'rb') as f:
     pico_trie = pickle.load(f)
 
+with open(os.path.join(trialstreamer.DATA_ROOT, 'mesh_subtrees.pck'), 'rb') as f:
+    subtrees = pickle.load(f)
+
+def get_subtree(mesh_ui):
+    try:        
+        decs = nx.descendants(tree, mesh_ui)
+    except nx.exception.NetworkXError:
+        return set([mesh_ui])
+    decs.add(mesh_ui)
+    return decs
 
 def auth(api_key, required_scopes):
     print(trialstreamer.config.API_KEYS)
@@ -63,7 +76,6 @@ def picosearch(body):
     if len(query)==0:
         return jsonify([])
     retmode = body.get("retmode", "json-short")
-    print(retmode)
 
     builder = []
 
@@ -74,7 +86,7 @@ def picosearch(body):
 
     params = sql.SQL(' AND ').join(builder)
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.year, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true AND pm.is_human=true;")
@@ -88,7 +100,18 @@ def picosearch(body):
             cur.execute(select + params + join)
             for i, row in enumerate(cur):
                 if retmode=='json-short':
-                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text']})
+                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
+                        "population": row['population'],
+                        "interventions": row['interventions'],
+                        "outcomes": row['outcomes'],
+                        "population_mesh": row['population_mesh'],
+                        "interventions_mesh": row['interventions_mesh'],
+                        "outcomes_mesh": row['outcomes_mesh'],
+                        "low_rsg_bias": row['low_rsg_bias'],
+                        "low_ac_bias": row['low_ac_bias'],
+                        "low_bpp_bias": row['low_bpp_bias'],
+                        "num_randomized": row['num_randomized'],
+                        "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab'])})
                 elif retmode=='ris':
                     out.append(OrderedDict([("TY", "JOUR"),
                                             ("DB", "Trialstreamer"),
