@@ -160,7 +160,7 @@ def download_ftp_updates():
 
 def update_counts():
     cur = dbutil.db.cursor()
-    cur.execute("refresh materialized view pubmed_year_counts;")
+    cur.execute("refresh materialized view pubmed_rct_count;")
     cur.close()
     dbutil.db.commit()
 
@@ -618,3 +618,4 @@ def update():
     download_ftp_baseline()
     download_ftp_updates()
     annotate_rcts()
+    update_counts()

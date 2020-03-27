@@ -66,6 +66,25 @@ def autocomplete(q):
         # where we have enough chars, process and get top ranked
         return jsonify(sorted(matches, key=lambda x: x['count'], reverse=True)[:max_return])
 
+def meta():
+    """
+    returns last updated date, and also total RCT count
+    """
+
+    with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
+           host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
+           port=trialstreamer.config.POSTGRES_PORT) as db:
+        cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # get last PubMed updated date
+        cur.execute("select source_date from update_log where update_type='pubmed_update' order by source_date desc limit 1;")
+        last_updated = cur.fetchone()['source_date']
+
+        cur.execute("select count_rct_precise from pubmed_rct_count;")
+        num_rcts = cur.fetchone()['count_rct_precise']
+
+    return jsonify({"last_updated": last_updated, "num_rcts": num_rcts})
+
+
 
 def picosearch(body):
     """
