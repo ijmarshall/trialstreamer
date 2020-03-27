@@ -148,6 +148,32 @@
                     }
                 ]
             }
+        },
+        "/meta": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "last_updated": {
+                                    "type": "string"
+                                },
+                                "num_rcts": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieve metadata about Trialstreamer",
+                "description": "Returns the total RCT count, and last updated date\n",
+                "operationId": "trialstreamer.cnxapp.meta",
+                "tags": [
+                    "queries"
+                ]
+            }
         }
     },
     "schemes": [
