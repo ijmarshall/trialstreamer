@@ -167,7 +167,7 @@ create materialized view if not exists pubmed_year_counts AS
         round(count(*) * avg(rct_probability)) as est_rct_count
 from pubmed where year >= 1948 group by year;
 
-
+create materialized view if not exists pubmed_rct_count as select count(*) as count_rct_precise from pubmed where is_rct_precise=true;
 
 
 """)
@@ -209,4 +209,4 @@ def update_counts():
     cur.execute("SELECT COUNT(*) FROM pubmed WHERE is_rct_precise=true;")
 
 
-# make_tables()  # if they don't exist
+make_tables()  # if they don't exist
