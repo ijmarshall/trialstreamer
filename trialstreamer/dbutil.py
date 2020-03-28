@@ -170,6 +170,32 @@ from pubmed where year >= 1948 group by year;
 create materialized view if not exists pubmed_rct_count as select count(*) as count_rct_precise from pubmed where is_rct_precise=true;
 
 
+create table if not exists medarxiv_covid19 (
+            id serial primary key,
+            doi varchar(512),
+            url varchar(512),
+            year integer,
+            date timestamp,
+            ti text,
+            ab text,
+            is_human boolean,
+            is_rct_precise boolean,
+            is_rct_balanced boolean,
+            is_rct_sensitive boolean,
+            rct_probability real,
+            population jsonb,
+            interventions jsonb,
+            outcomes jsonb,
+            population_mesh jsonb,
+            interventions_mesh jsonb,
+            outcomes_mesh jsonb,
+            num_randomized integer,
+            low_rsg_bias boolean,
+            low_ac_bias boolean,
+            low_bpp_bias boolean,
+            punchline_text text,
+            effect varchar(22)
+            );
 """)
     cur = db.cursor()
     cur.execute(create_tables_command)

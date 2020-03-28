@@ -85,6 +85,39 @@ def meta():
     return jsonify({"last_updated": last_updated, "num_rcts": num_rcts})
 
 
+def covid19():
+    """
+    returns RCTs from Pubmed and Medarxiv in people with Covid-19
+    """
+    ts_sql = """
+    SELECT pm.pmid, pm.ti, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes,
+    pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias,
+    pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE pm.is_rct_precise=true and
+    pa.population_mesh@>'[{"mesh_ui": "C000657245"}]' and pm.pmid=pa.pmid;
+    """
+
+    medrxiv_sql = """
+    SELECT ti, ab, year, punchline_text, population, interventions, outcomes,
+    population_mesh, interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias, low_ac_bias,
+    low_bpp_bias, punchline_text FROM medarxiv_covid19 WHERE is_rct_precise=true;
+    """
+
+    out = []
+    with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
+           host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
+           port=trialstreamer.config.POSTGRES_PORT) as db:
+        cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        out = {}
+        cur.execute(ts_sql)
+        out['trialstreamer_published'] = [dict(r) for r in cur.fetchall()]
+        cur.execute(medrxiv_sql)
+        out['trialstreamer_preprint'] = [dict(r) for r in cur.fetchall()]
+    return jsonify(out)
+
+def get_cite(authors, journal, year):
+    return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
+
 
 def picosearch(body):
     """
@@ -120,7 +153,7 @@ def picosearch(body):
     params = sql.SQL(' AND ').join(builder)
                                                                                                                                                     
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true AND pm.is_human=true LIMIT 250;")
@@ -137,6 +170,7 @@ def picosearch(body):
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
+                        "citation": get_cite(row['authors'], row['journal'], row['year']),
                         "population": row['population'],
                         "interventions": row['interventions'],
                         "outcomes": row['outcomes'],

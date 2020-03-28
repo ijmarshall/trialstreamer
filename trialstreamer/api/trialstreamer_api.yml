@@ -62,7 +62,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/article-short"
+                                "$ref": "#/definitions/article"
                             }
                         },
                         "examples": {
@@ -174,6 +174,24 @@
                     "queries"
                 ]
             }
+        },
+        "/covid19": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                },
+                "summary": "returns live trial publications on Covid-19",
+                "operationId": "trialstreamer.cnxapp.covid19",
+                "tags": [
+                    "queries"
+                ]
+            }
         }
     },
     "schemes": [
@@ -202,7 +220,7 @@
     "definitions": {
         "pico-terms": {
             "type": "object",
-            "title": "PICO structured terms",
+            "title": "Query PICO term structure ",
             "description": "Consists of two parts: a structured vocabulary term (currently MeSH) as UI, and the field (`population`, `interventions`, or `outcomes`) that it describes. Optionally includes the text descriptor of the MeSH code.",
             "properties": {
                 "field": {
@@ -226,10 +244,10 @@
                 "mesh_ui"
             ]
         },
-        "article-short": {
+        "article": {
             "type": "object",
-            "title": "Article (short)",
-            "description": "Short article representation",
+            "title": "Annotated article",
+            "description": "Annotated article",
             "properties": {
                 "pmid": {
                     "type": "string",
@@ -243,6 +261,9 @@
                     "type": "string",
                     "maxLength": 4,
                     "pattern": "[0-9]+"
+                },
+                "": {
+                    "type": "string"
                 }
             },
             "required": [
