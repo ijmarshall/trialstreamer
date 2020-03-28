@@ -116,7 +116,10 @@ def covid19():
     return jsonify(out)
 
 def get_cite(authors, journal, year):
-    return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
+    if len(authors) >= 1:
+        return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
+    else:
+        return f"{journal}. {year}"
 
 
 def picosearch(body):
