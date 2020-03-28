@@ -83,7 +83,7 @@ def meta():
         cur.execute("select count_rct_precise from pubmed_rct_count;")
         num_rcts = cur.fetchone()['count_rct_precise']
 
-    return jsonify({"last_updated": last_updated, "num_rcts": num_rcts})
+    return jsonify({"last_updated": last_updated, "num_rcts": f'{num_rcts:,}'})
 
 
 def covid19():
