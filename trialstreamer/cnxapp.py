@@ -54,8 +54,9 @@ def autocomplete(q):
     min_char = 3
     max_return = 5
     substr = q
-    if substr is None:
+    if substr is None or not pico_trie.has_subtrie(substr):
         return jsonify([])
+
 
     matches = pico_trie.itervalues(prefix=substr)
 
