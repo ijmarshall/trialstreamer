@@ -290,14 +290,27 @@ def parse_file(fn):
         for line in tqdm.tqdm(iter(process.stdout.readline, b'')):  # replace '' with b'' for Python 3
             yield json.loads(line.decode('utf-8'))
 
-def upload_to_postgres(fn):
-    cur = dbutil.db.cursor()
-    cur.execute("DELETE FROM ictrp;")
+def upload_to_postgres(fn, force_update=False):
+
+
+    cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    if force_update:
+        cur.execute("DELETE FROM ictrp;")
+        already_done = set()
+    else:
+        cur.execute("SELECT regid from ictrp;")
+        already_done = set((r['regid'] for r in cur))
+
 
     for i, entry in tqdm.tqdm(enumerate(parse_file(fn)), desc="parsing ICTRP entries"):
 
         if i % 500 == 0:
             dbutil.db.commit()
+
+        if entry['study_id'] in already_done:
+            continue
+
 
         try:
             assert is_rct(entry.get('study_design'))=='RCT'
@@ -314,6 +327,8 @@ def upload_to_postgres(fn):
         cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
             row)
 
+        already_done.add(entry['study_id'])
+
 
     cur.close()
     dbutil.db.commit()
@@ -328,7 +343,7 @@ def add_year():
     dbutil.db.commit()
 
 
-def update():
+def update(force_update=False):
     log.info('checking for any new data')
     fn = check_if_new_data()
     if fn is None:
@@ -339,19 +354,16 @@ def update():
     download_date = datetime.datetime.now()
     log.info('downloaded to {}'.format(local_fn))
     log.info('Parsing to postgres {}'.format(local_fn))
-    upload_to_postgres(local_fn)
+    upload_to_postgres(local_fn, force_update=force_update)
     dbutil.log_update(update_type='ictrp', source_filename=local_fn, source_date=fn['date'], download_date=download_date)
     log.info('adding year of record creation information')
     add_year()
 
 def upload_old_file(local_fn, force_update=False):
-    if force_update==False:
-        log.warning('This will delete the existing ICTRP database. Please run with force_update=True to continue.')
-        return None
     local_fn = os.path.join(config.ICTRP_DATA_PATH, local_fn)
     download_date = datetime.datetime.now()
     log.info('Parsing to postgres {}'.format(local_fn))
-    upload_to_postgres(local_fn)
+    upload_to_postgres(local_fn, force_update=force_update)
     # dbutil.log_update(update_type='ictrp', source_filename=local_fn, source_date=get_date_from_ictrp_fn(local_fn), download_date=download_date)
     log.info('adding year of record creation information')
     add_year()

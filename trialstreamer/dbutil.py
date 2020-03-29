@@ -114,7 +114,7 @@ create table if not exists ictrp (
             population_mesh jsonb,
             interventions_mesh jsonb,
             outcomes_mesh jsonb,
-            target_size varchar(16),
+            target_size varchar(10),
             is_rct varchar(16),
             is_recruiting varchar(16),
             countries jsonb,
