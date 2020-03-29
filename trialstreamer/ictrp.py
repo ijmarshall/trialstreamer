@@ -228,7 +228,10 @@ def parse_ictrp(ictrp_data):
     except:
         out['target_size'] = "unknown"
 
-    out["date_registered"] = datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d")
+    try:
+        out["date_registered"] = datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d")
+    except:
+        out["date_registered"] = None
 
     try:
         out["countries"] = ictrp_data['countries']

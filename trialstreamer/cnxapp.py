@@ -27,6 +27,9 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
 with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_mesh_autocompleter.pck'), 'rb') as f:
     pico_trie = pickle.load(f)
 
+with open(os.path.join(trialstreamer.DATA_ROOT, 'drugs_from_class.pck'), 'rb') as f:
+    drugs_from_class = pickle.load(f)
+
 with open(os.path.join(trialstreamer.DATA_ROOT, 'mesh_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
 
@@ -34,8 +37,10 @@ def get_subtree(mesh_ui):
     try:        
         decs = nx.descendants(subtrees, mesh_ui)
     except nx.exception.NetworkXError:
-        return set([mesh_ui])
+        decs = set()
     decs.add(mesh_ui)
+    if mesh_ui in drugs_from_class:
+        decs.update(drugs_from_class[mesh_ui])
     return decs
 
 def auth(api_key, required_scopes):
