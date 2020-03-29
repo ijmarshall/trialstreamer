@@ -200,7 +200,10 @@ def parse_ictrp(ictrp_data):
            "date_registered": datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d"),
            "countries": ictrp_data['countries']}
 
-
+    try:
+        out['target_size'] = str(int(out['target_size']))
+    except:
+        out['target_size'] = 'unknown'
     
     for f in ['population', 'interventions', 'outcomes']:
         out[f"{f}_mesh"] = minimap.get_unique_terms((cleanup(o_i) for o_i in out[f] if o_i))
