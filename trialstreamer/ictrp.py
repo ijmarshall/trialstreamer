@@ -296,6 +296,13 @@ def upload_to_postgres(fn):
 
     for i, entry in tqdm.tqdm(enumerate(parse_file(fn)), desc="parsing ICTRP entries"):
 
+        if i % 500 == 0:
+            dbutil.db.commit()
+
+        try:
+            assert is_rct(entry.get('study_design'))=='RCT'
+        except:
+            continue
 
         p = parse_ictrp(entry)
         row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
@@ -307,8 +314,7 @@ def upload_to_postgres(fn):
         cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
             row)
 
-        if i % 500 == 0:
-            dbutil.db.commit()
+
     cur.close()
     dbutil.db.commit()
 
