@@ -234,6 +234,11 @@ def parse_ictrp(ictrp_data):
         out["date_registered"] = None
 
     try:
+        out['year'] = out['date_registered'].year
+    except:
+        out['year'] = None
+
+    try:
         out["countries"] = ictrp_data['countries']
     except:
         out["countries"] = []
@@ -324,7 +329,7 @@ def upload_to_postgres(fn, force_update=False):
         row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
             json.dumps(p['outcomes']), json.dumps(p['population_mesh']), 
             json.dumps(p['interventions_mesh']), json.dumps(p['outcomes_mesh']),
-            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['date_registered'].year,
+            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['year'],
             json.dumps(p['countries']), json.dumps(entry), fn)
 
         cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
