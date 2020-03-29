@@ -10,6 +10,10 @@ import datetime
 from trialstreamer import config, dbutil
 import psycopg2
 import time
+import logging
+
+log = logging.getLogger(__name__)
+
 
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
@@ -31,6 +35,7 @@ def get_articles():
 
 
 def predict(X, tasks=None, filter_rcts="is_rct_sensitive"):
+
     if tasks is None:
         tasks = ['rct_bot']
     base_url = config.ROBOTREVIEWER_URL
@@ -98,7 +103,11 @@ def upload_to_postgres(annotations, meta):
    
     
 def update():
+    log.info("Fetching articles from MedRxiv feed")
 	articles = get_articles()
+    log.info("Annotating articles with RobotReviewer")
 	annotations = predict(articles['articles'], tasks=['rct_bot', 'human_bot', 'pico_span_bot', 'sample_size_bot', 'bias_ab_bot', 'punchline_bot'], filter_rcts="is_rct_sensitive")
-	upload_to_postgres(annotations, articles['meta'])
+    log.info("Uploading to DB")
+	upload_to_postgres(annotations, articles['meta'])    
 	dbutil.db.commit()
+    log.info("All done!")
