@@ -13,10 +13,12 @@ import os
 import re
 import datetime
 import tqdm
+from robotreviewer.textprocessing import minimap
 import xml.etree.cElementTree as ET
 import subprocess
 import sys
 import json
+
 
 
 log = logging.getLogger(__name__)
@@ -58,6 +60,152 @@ def get_date_from_ictrp_fn(fn):
         '%G %V %u')
     else:
         return None
+
+
+
+non_rcts = ['allocation : not applicable',
+ 'assignment: other',
+ 'before after control',
+ 'case control',
+ 'case control',
+ 'case control study',
+ 'case series',
+ 'case study',
+ 'cluster randomly sampling',
+ 'cohort study',
+ 'control: historical',
+ 'cross sectional',
+ 'cross sectional',
+ 'cross sectional study',
+ 'diagnostic accuracy study',
+ 'diagnostic test for accuracy',
+ 'duration: longitudinal',
+ 'epidemiological study',
+ 'historical control',
+ 'logitudinal',
+ 'longitudinal study  treatment ',
+ 'mixed methods',
+ 'n of 1 trial',
+ 'non comparative',
+ 'non randomised trial',
+ 'non randomized control',
+ 'non randomized controlled trial',
+ 'non rct',
+ 'not randomized',
+ 'observational',
+ 'observational study',
+ 'open label',
+ 'open label',
+ 'pre post',
+ 'purpose: natural history',
+ 'qualitative',
+ 'quasi experimental',
+ 'quasi randomized controlled',
+ 'randomised: no',
+ 'randomization sequence:not applicable',
+ 'randomization sequence:other',
+ 'randomization: n a',
+ 'randomly sampling',
+ 'retrospective',
+ 'sequential',
+ 'single arm',
+ 'single arm',
+ 'single group assignment',
+ 'survey',
+ 'uncontrolled']
+
+rcts = ['adaptive randomization',
+ 'allocation : rct',
+ 'assignment: crossover',
+ 'cluster controlled trial',
+ 'cluster randomization',
+ 'computer generated randomization',
+ 'cross over',
+ 'crossover trial',
+ 'double blind',
+ 'double masked',
+ 'experimental',
+ 'factorial',
+ 'interventional trial',
+ 'parallel',
+ 'permuted block randomization',
+ 'phase 1',
+ 'phase 2',
+ 'phase 3',
+ 'phase 4',
+ 'phase i',
+ 'phase ii',
+ 'phase iii',
+ 'phase iv',
+ 'pilot rct',
+ 'ramdomised controlled trial',
+ 'rct',        
+ 'random allocation',
+ 'random number table',
+ 'randomised',
+ 'randomise',
+ 'randomised controlled trial',
+ 'randomization sequence:coin toss  lottery  toss of dice  shuffling cards',
+ 'randomize',
+ 'randomized',
+ 'randomized controlled trial',
+ 'single centre trial',
+ 'stratified block randomization',
+ 'stratified randomization']
+
+def cleanup(raw):
+    txt = re.sub("[^a-zA-Z\d]", " ", raw)
+    txt = re.sub("\s\s+", " ", txt)
+    return txt
+
+def is_recruiting(recruitment_status):
+    if recruitment_status == "Recruiting":
+        return "recruiting"
+    elif recruitment_status=="Not Recruiting":
+        return "not recruiting"
+    else:
+        return "unknown"
+
+def is_rct(study_design):
+    """
+    rules of thumb for finding RCTs
+    based on analysis of unique study_design fields conducted on 2020-03-29
+    """
+    if study_design is None:
+        return "unknown"
+
+    sd_clean = cleanup(study_design.lower())
+
+    if any((r in sd_clean for r in non_rcts)):
+        # first get the definite no's    
+        return "non-RCT"
+    elif any((r in sd_clean for r in rcts)):
+        # then get the likely yes's    
+        return "RCT"
+    else:
+        return "unknown"
+
+
+
+def parse_ictrp(ictrp_data):
+    
+        
+    out = {"regid": ictrp_data['study_id'], "ti": ictrp_data['scientific_title'],
+        "population": [r['description'] for r in ictrp_data.get("health_conditions", [])],
+           "interventions": [r['description'] for r in ictrp_data.get("interventions", [])],
+           "outcomes": [r['description'] for r in ictrp_data.get("outcomes", [])],
+           "is_rct": is_rct(ictrp_data.get('study_design')),
+           "is_recruiting": is_recruiting(ictrp_data.get("recruitment_status")),
+           "target_size": ictrp_data['target_size'],
+           "date_registered": datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d"),
+           "countries": ictrp_data['countries']}
+    
+    for f in ['population', 'interventions', 'outcomes']:
+        out[f"{f}_mesh"] = minimap.get_unique_terms((cleanup(o_i) for o_i in out[f] if o_i))
+        
+    
+    
+    return out
 
 
 log.info('Connecting to S3')
@@ -111,10 +259,15 @@ def upload_to_postgres(fn):
     cur.execute("DELETE FROM ictrp;")
 
     for entry in tqdm.tqdm(parse_file(fn), desc="parsing ICTRP entries"):
-        row = (entry['study_id'], entry['scientific_title'],
-                json.dumps(entry), fn)
 
-        cur.execute("INSERT INTO ictrp (regid, ti, ictrp_data, source_filename) VALUES (%s, %s, %s, %s);",
+        p = parse_ictrp(entry)
+        row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
+            json.dumps(p['outcomes']), json.dumps(p['population_mesh']), 
+            json.dumps(p['interventions_mesh']), json.dumps(p['outcomes_mesh']),
+            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['date_registered'].year,
+            json.dumps(p['countries']), json.dumps(entry), fn)
+
+        cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
             row)
     cur.close()
     dbutil.db.commit()
@@ -127,7 +280,6 @@ def add_year():
     cur.execute("update ictrp set year=left(ictrp_data->>'date_registered', 4)::int;")
     cur.close()
     dbutil.db.commit()
-
 
 
 def update():
