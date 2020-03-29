@@ -99,7 +99,7 @@ def meta():
 
 def covid19():
     """
-    returns RCTs from Pubmed and Medarxiv in people with Covid-19
+    returns RCTs from Pubmed and MedRxiv in people with Covid-19
     """
     ts_sql = """
     SELECT pm.pmid, pm.ti, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes,
@@ -111,7 +111,7 @@ def covid19():
     medrxiv_sql = """
     SELECT ti, ab, year, punchline_text, population, interventions, outcomes,
     population_mesh, interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias, low_ac_bias,
-    low_bpp_bias, punchline_text FROM medarxiv_covid19 WHERE is_rct_precise=true;
+    low_bpp_bias, punchline_text FROM medrxiv_covid19 WHERE is_rct_precise=true;
     """
 
     out = []
@@ -132,6 +132,9 @@ def get_cite(authors, journal, year):
         return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
     else:
         return f"{journal}. {year}"
+
+def get_medrxiv_cite(authors, source, year):
+    return f"{authors[0]['author_name']}{' et al.' if len(authors) > 1 else ''}, {source}. {year}"
 
 
 def picosearch(body):
@@ -197,7 +200,8 @@ def picosearch(body):
                         "low_ac_bias": row['low_ac_bias'],
                         "low_bpp_bias": row['low_bpp_bias'],
                         "num_randomized": row['num_randomized'],
-                        "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab'])})
+                        "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
+                        "article_type": "journal article"})
                 elif retmode=='ris':
                     out.append(OrderedDict([("TY", "JOUR"),
                                             ("DB", "Trialstreamer"),
@@ -206,6 +210,49 @@ def picosearch(body):
                                             ("YR", row['year']),
                                             ("JO", row['journal']),
                                             ("AB", row['ab'])]))
+
+    ### START COVID-19 PREPRINTS
+    if any(((q_i['mesh_ui']=="C000657245") and (q_i['field']=="population") for q_i in query)):
+
+        if retmode=='json-short':
+            cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pa.authors, pa.source FROM medrxiv_covid19 as pa WHERE ")
+        elif retmode=='ris':
+            cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
+        cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
+                                                                            
+
+        with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
+           host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
+           port=trialstreamer.config.POSTGRES_PORT) as db:
+            with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+                cur.execute(cov_select + params + cov_join)
+                print((cov_select + cov_join).as_string(cur))
+                for i, row in enumerate(cur):
+                    if retmode=='json-short':
+                        out.append({"ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
+                            "citation": get_medrxiv_cite(row['authors'], row['source'], row['year']),
+                            "population": row['population'],
+                            "interventions": row['interventions'],
+                            "outcomes": row['outcomes'],
+                            "population_mesh": row['population_mesh'],
+                            "interventions_mesh": row['interventions_mesh'],
+                            "outcomes_mesh": row['outcomes_mesh'],
+                            "low_rsg_bias": row['low_rsg_bias'],
+                            "low_ac_bias": row['low_ac_bias'],
+                            "low_bpp_bias": row['low_bpp_bias'],
+                            "num_randomized": row['num_randomized'],
+                            "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
+                            "article_type": "preprint"})
+                    elif retmode=='ris':
+                        out.append(OrderedDict([("TY", "JOUR"),
+                                                ("DB", "Trialstreamer"),
+                                                ("ID", row['pmid']),
+                                                ("TI", row['ti']),
+                                                ("YR", row['year']),
+                                                ("JO", row['source']),
+                                                ("AB", row['ab'])]))
+
+
 
     if retmode=='json-short':
         return jsonify(out)
