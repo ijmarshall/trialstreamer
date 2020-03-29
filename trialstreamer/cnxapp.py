@@ -179,7 +179,7 @@ def picosearch(body):
     out = []
 
 
-
+    # PUBMED
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
@@ -212,6 +212,32 @@ def picosearch(body):
                                             ("JO", row['journal']),
                                             ("AB", row['ab'])]))
 
+
+    ### ICTRP
+    if retmode=='json-short':
+        ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
+    elif retmode=='ris':
+        ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
+    ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")                                                                            
+
+    with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
+           host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
+           port=trialstreamer.config.POSTGRES_PORT) as db:
+        with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+            cur.execute(ictrp_select + params + ictrp_join)
+            print((ictrp_select + params + ictrp_join).as_string(cur))
+            for i, row in enumerate(cur):
+                if retmode=='json-short':
+                    out_d = dict(row)
+                    out_d['article_type']="trial registration"
+                    out.append(out_d)
+                elif retmode=='ris':
+                    # TODO MAKE RIS REASONABLE FOR ICTRP
+                    pass
+
+
+
+
     ### START COVID-19 PREPRINTS
     if any(((q_i['mesh_ui']=="C000657245") and (q_i['field']=="population") for q_i in query)):
 
@@ -220,6 +246,7 @@ def picosearch(body):
         elif retmode=='ris':
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
+
                                                                             
 
         with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
@@ -246,13 +273,8 @@ def picosearch(body):
                             "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
                             "article_type": "preprint"})
                     elif retmode=='ris':
-                        out.append(OrderedDict([("TY", "JOUR"),
-                                                ("DB", "Trialstreamer"),
-                                                ("ID", row['pmid']),
-                                                ("TI", row['ti']),
-                                                ("YR", row['year']),
-                                                ("JO", row['source']),
-                                                ("AB", row['ab'])]))
+                        pass
+                        # TODO MAKE RIS REASONABLE FOR ICTRP
 
 
 
