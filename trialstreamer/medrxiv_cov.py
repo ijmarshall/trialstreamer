@@ -1,5 +1,5 @@
 #
-#	MedRxiv - Covid RCT downloads
+#   MedRxiv - Covid RCT downloads
 #
 
 import trialstreamer
@@ -104,10 +104,10 @@ def upload_to_postgres(annotations, meta):
     
 def update():
     log.info("Fetching articles from MedRxiv feed")
-	articles = get_articles()
+    articles = get_articles()
     log.info("Annotating articles with RobotReviewer")
-	annotations = predict(articles['articles'], tasks=['rct_bot', 'human_bot', 'pico_span_bot', 'sample_size_bot', 'bias_ab_bot', 'punchline_bot'], filter_rcts="is_rct_sensitive")
+    annotations = predict(articles['articles'], tasks=['rct_bot', 'human_bot', 'pico_span_bot', 'sample_size_bot', 'bias_ab_bot', 'punchline_bot'], filter_rcts="is_rct_sensitive")
     log.info("Uploading to DB")
-	upload_to_postgres(annotations, articles['meta'])    
-	dbutil.db.commit()
+    upload_to_postgres(annotations, articles['meta'])    
+    dbutil.db.commit()
     log.info("All done!")
