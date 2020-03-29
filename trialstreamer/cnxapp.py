@@ -57,15 +57,26 @@ def autocomplete(q):
     if substr is None or not pico_trie.has_subtrie(substr):
         return jsonify([])
 
-
     matches = pico_trie.itervalues(prefix=substr)
+
+    def flat_list(l):
+        return [item for sublist in l for item in sublist]
+
+    def dedupe(l):
+        encountered = set()
+        out = []
+        for r in l:
+            if r['mesh_pico_display'] not in encountered:
+                encountered.add(r['mesh_pico_display'])
+                out.append(r)
+        return out
 
     if len(substr) < min_char:
         # for short ones just return first 5
-        return jsonify([r for _, r in zip(range(max_return), matches)])
+        return jsonify(dedupe(flat_list([r for _, r in zip(range(max_return), matches)])))
     else:
         # where we have enough chars, process and get top ranked
-        return jsonify(sorted(matches, key=lambda x: x['count'], reverse=True)[:max_return])
+        return jsonify(sorted(dedupe(flat_list(matches)), key=lambda x: x['count'], reverse=True)[:max_return])
 
 def meta():
     """
@@ -171,6 +182,7 @@ def picosearch(body):
            port=trialstreamer.config.POSTGRES_PORT) as db:
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
             cur.execute(select + params + join)
+            print((select + params + join).as_string(cur))
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
