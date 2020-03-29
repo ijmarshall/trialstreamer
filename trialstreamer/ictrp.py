@@ -189,27 +189,58 @@ def is_rct(study_design):
 
 def parse_ictrp(ictrp_data):
     
+
         
-    out = {"regid": ictrp_data['study_id'], "ti": ictrp_data['scientific_title'],
-        "population": [r['description'] for r in ictrp_data.get("health_conditions", [])],
-           "interventions": [r['description'] for r in ictrp_data.get("interventions", [])],
-           "outcomes": [r['description'] for r in ictrp_data.get("outcomes", [])],
-           "is_rct": is_rct(ictrp_data.get('study_design')),
-           "is_recruiting": is_recruiting(ictrp_data.get("recruitment_status")),
-           "target_size": ictrp_data['target_size'],
-           "date_registered": datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d"),
-           "countries": ictrp_data['countries']}
+    out = {"regid": ictrp_data['study_id']}
 
     try:
-        out['target_size'] = str(int(out['target_size']))
+        out["ti"] = ictrp_data['scientific_title'].strip()
     except:
-        out['target_size'] = 'unknown'
-    
+        out["ti"] = "unknown"
+
+    try:        
+        out["population"] = [r.get('description', '').strip() for r in ictrp_data.get("health_conditions", [])]
+    except:
+        out["population"] = []
+
+    try:        
+        out["interventions"] = [r.get('description', '').strip() for r in ictrp_data.get("interventions", [])]
+    except:
+        out["interventions"] = []
+
+    try:        
+        out["outcomes"] = [r.get('description', '').strip() for r in ictrp_data.get("outcomes", [])]
+    except:
+        out["outcomes"] = []
+
+    try:
+        out["is_rct"] = is_rct(ictrp_data.get('study_design'))
+    except:
+        out['is_rct'] = "unknown"
+
+    try:
+        out["is_recruiting"] = is_recruiting(ictrp_data.get("recruitment_status"))
+    except:
+        out["is_recruiting"] = "unknown"
+
+    try:
+        out["target_size"] = str(int(ictrp_data['target_size']))
+    except:
+        out['target_size'] = "unknown"
+
+    out["date_registered"] = datetime.datetime.strptime(ictrp_data['date_registered'], "%Y-%m-%d")
+
+    try:
+        out["countries"] = ictrp_data['countries']
+    except:
+        out["countries"] = []
+
     for f in ['population', 'interventions', 'outcomes']:
-        out[f"{f}_mesh"] = minimap.get_unique_terms((cleanup(o_i) for o_i in out[f] if o_i))
+        try:
+            out[f"{f}_mesh"] = minimap.get_unique_terms((cleanup(o_i) for o_i in out[f] if o_i))
+        except:
+            out[f"{f}_mesh"] = []
         
-    
-    
     return out
 
 
@@ -263,7 +294,8 @@ def upload_to_postgres(fn):
     cur = dbutil.db.cursor()
     cur.execute("DELETE FROM ictrp;")
 
-    for entry in tqdm.tqdm(parse_file(fn), desc="parsing ICTRP entries"):
+    for i, entry in tqdm.tqdm(enumerate(parse_file(fn)), desc="parsing ICTRP entries"):
+
 
         p = parse_ictrp(entry)
         row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
@@ -274,6 +306,9 @@ def upload_to_postgres(fn):
 
         cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
             row)
+
+        if i % 500 == 0:
+            dbutil.db.commit()
     cur.close()
     dbutil.db.commit()
 
