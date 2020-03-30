@@ -225,6 +225,8 @@ def parse_ictrp(ictrp_data):
 
     try:
         out["target_size"] = str(int(ictrp_data['target_size']))
+        if len(out["target_size"]) > 10:
+            out['target_size'] = "unknown"    
     except:
         out['target_size'] = "unknown"
 
