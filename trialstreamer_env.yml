@@ -22,6 +22,7 @@ dependencies:
   - libpq=11.2=h20c2e04_0
   - libstdcxx-ng=9.1.0=hdf63c60_0
   - markupsafe=1.1.1=py36h7b6447c_0
+  - networkx=2.3
   - ncurses=6.1=he6710b0_1
   - openssl=1.1.1d=h7b6447c_3
   - pip=19.3.1=py36_0
@@ -38,6 +39,7 @@ dependencies:
   - xz=5.2.4=h14c3975_4
   - zlib=1.2.11=h7b6447c_3
   - pip:
+    - regex==2020.2.20
     - attrs==19.3.0
     - chardet==3.0.4
     - clickclick==1.2.2
