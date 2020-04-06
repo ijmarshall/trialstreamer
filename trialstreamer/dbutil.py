@@ -16,7 +16,7 @@ def make_tables():
     """
     set up the database if it doesn't yet exist
     """
-    create_tables_command = ("""cpreate table if not exists pubmed (
+    create_tables_command = ("""create table if not exists pubmed (
             id serial primary key,
             pmid varchar(16) unique,
             pm_status varchar(32),

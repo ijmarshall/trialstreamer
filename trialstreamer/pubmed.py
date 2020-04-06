@@ -304,18 +304,17 @@ def predict(X, tasks=None, filter_rcts="is_rct_sensitive"):
         "filter_rcts": filter_rcts
     }
     r = requests.post(base_url+'queue-documents', json=upload_data, headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY})
-    report_id = json.loads(r.json())
+    report_id = r.json()
 
     def check_report(report_id):
         r = requests.get(base_url +'report-status/'+report_id['report_id'], headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY})
-        return json.loads(r.json())['state'] == 'SUCCESS'
+        return r.json()['state'] == 'SUCCESS'
 
     while not check_report(report_id):
         time.sleep(0.3)
 
-    report = json.loads(requests.get(base_url +'report/'+report_id['report_id'], headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY}).json())
+    report = requests.get(base_url +'report/'+report_id['report_id'], headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY}).json()
     return report
-
 
 
 def classify(entry_batch):

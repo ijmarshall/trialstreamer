@@ -11,7 +11,6 @@ from psycopg2 import sql
 from psycopg2.extras import Json
 from collections import defaultdict
 import pickle
-from flask import jsonify
 from io import BytesIO as StringIO  # py3
 import connexion
 import networkx as nx
@@ -60,7 +59,7 @@ def autocomplete(q):
     max_return = 5
     substr = q
     if substr is None or not pico_trie.has_subtrie(substr):
-        return jsonify([])
+        return []
 
     matches = pico_trie.itervalues(prefix=substr)
 
@@ -78,10 +77,10 @@ def autocomplete(q):
 
     if len(substr) < min_char:
         # for short ones just return first 5
-        return jsonify(dedupe(flat_list([r for _, r in zip(range(max_return), matches)])))
+        return dedupe(flat_list([r for _, r in zip(range(max_return), matches)]))
     else:
         # where we have enough chars, process and get top ranked
-        return jsonify(sorted(dedupe(flat_list(matches)), key=lambda x: x['count'], reverse=True)[:max_return])
+        return sorted(dedupe(flat_list(matches)), key=lambda x: x['count'], reverse=True)[:max_return]
 
 def meta():
     """
@@ -99,7 +98,7 @@ def meta():
         cur.execute("select count_rct_precise from pubmed_rct_count;")
         num_rcts = cur.fetchone()['count_rct_precise']
 
-    return jsonify({"last_updated": last_updated, "num_rcts": f'{num_rcts:,}'})
+    return {"last_updated": last_updated, "num_rcts": f'{num_rcts:,}'}
 
 
 def covid19():
@@ -130,7 +129,7 @@ def covid19():
         out['trialstreamer_published'] = [dict(r) for r in cur.fetchall()]
         cur.execute(medrxiv_sql)
         out['trialstreamer_preprint'] = [dict(r) for r in cur.fetchall()]
-    return jsonify(out)
+    return out
 
 def get_cite(authors, journal, year):
     if len(authors) >= 1:
@@ -151,7 +150,7 @@ def picosearch(body):
     expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
-        return jsonify([])
+        return []
     retmode = body.get("retmode", "json-short")
 
     builder = []
@@ -179,7 +178,7 @@ def picosearch(body):
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true AND pm.is_human=true LIMIT 250;")
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_balanced=true;")
                                                                             
     out = []
 
@@ -284,7 +283,7 @@ def picosearch(body):
 
 
     if retmode=='json-short':
-        return jsonify(out)
+        return out
     elif retmode=='ris':
         report = ris.dumps(out)
         strIO = StringIO()
