@@ -192,7 +192,40 @@
                     "queries"
                 ]
             }
+        },
+        "/show_trial/{uuid}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "trialstreamer-auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "uuid",
+                        "required": True,
+                        "type": "string",
+                    }
+                ],
+                "summary": "returns the trial with the given unique identifier (PMID for now)",
+                "operationId": "trialstreamer.cnxapp.get_trial",
+                "tags": [
+                    "queries"
+                ]
+            } 
         }
+
+
     },
     "schemes": [
         "https"
