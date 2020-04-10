@@ -309,32 +309,45 @@ def picosearch(body):
 
 def get_trial(uuid):
     print(uuid)
-    select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE (pm.pmid = '{0}' AND pa.pmid = '{0}')".format(uuid))
-
+    
     out = []
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
                host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
                port=trialstreamer.config.POSTGRES_PORT) as db:
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            #import pdb; pdb.set_trace()
+            # first try pubmid @TODO probably we can ascertain this w/a regular expression and avoid this
+            # brute force means of checking if it's a pmid.
+            select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE (pm.pmid = '{0}' AND pa.pmid = '{0}')".format(uuid))
             cur.execute(select)
-            for i, row in enumerate(cur):
-                out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
-                    "citation": get_cite(row['authors'], row['journal'], row['year']),
-                    "population": row['population'],
-                    "interventions": row['interventions'],
-                    "outcomes": row['outcomes'],
-                    "dois": row['dois'],
-                    "population_mesh": row['population_mesh'],
-                    "interventions_mesh": row['interventions_mesh'],
-                    "outcomes_mesh": row['outcomes_mesh'],
-                    "low_rsg_bias": row['low_rsg_bias'],
-                    "low_ac_bias": row['low_ac_bias'],
-                    "low_bpp_bias": row['low_bpp_bias'],
-                    "num_randomized": row['num_randomized'],
-                    "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
-                    "article_type": "journal article"})
-            
+            if cur.rowcount > 0:
+                # then we found a trial in the pubmed table
+                for i, row in enumerate(cur):
+                    out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
+                        "citation": get_cite(row['authors'], row['journal'], row['year']),
+                        "population": row['population'],
+                        "interventions": row['interventions'],
+                        "outcomes": row['outcomes'],
+                        "dois": row['dois'],
+                        "population_mesh": row['population_mesh'],
+                        "interventions_mesh": row['interventions_mesh'],
+                        "outcomes_mesh": row['outcomes_mesh'],
+                        "low_rsg_bias": row['low_rsg_bias'],
+                        "low_ac_bias": row['low_ac_bias'],
+                        "low_bpp_bias": row['low_bpp_bias'],
+                        "num_randomized": row['num_randomized'],
+                        "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
+                        "article_type": "journal article"})
+            else: 
+                # didn't find it; try ICTRP
+                ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE pa.regid = '{0}'".format(uuid))
+                cur.execute(ictrp_select)
+                for i, row in enumerate(cur):                    
+                    out_d = dict(row)
+                    out_d['article_type']="trial registration"
+                    out.append(out_d)
+
+    
+    # note that if we fail on both PubMed and ICTRP table this is just an empty list
     return out
     
 
