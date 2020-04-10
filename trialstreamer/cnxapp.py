@@ -34,7 +34,7 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
     clf_cutoffs = json.load(f)
 log.info("done!")
 
-log.info("Autocompeter")
+log.info("Loading autocompleter")
 with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_cui_autocompleter.pck'), 'rb') as f:
     pico_trie = pickle.load(f)
 log.info("done!")
@@ -191,7 +191,7 @@ def picosearch(body):
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_balanced=true limit 250;")
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true limit 250;")
                                                                             
     out = []
 
