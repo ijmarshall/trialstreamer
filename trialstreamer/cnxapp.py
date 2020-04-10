@@ -1,4 +1,9 @@
-from trialstreamer import dbutil
+import logging
+logging.basicConfig(level="INFO", format='[%(levelname)s] %(name)s %(asctime)s: %(message)s')
+log = logging.getLogger(__name__)
+            
+log.info("Welcome to the Trialstreamer Server!")
+
 import trialstreamer
 from trialstreamer import ris
 from collections import OrderedDict
@@ -18,28 +23,36 @@ from connexion.exceptions import OAuthProblem
 from flask_cors import CORS
 from flask import send_file
 from trialstreamer import schwartz_hearst
-            
 
+log.info("Connecting to database")
+from trialstreamer import dbutil
+log.info('Done!')
+
+log.info("Loading data")
+log.info("RCT model calibration")
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
+log.info("done!")
 
-with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_mesh_autocompleter.pck'), 'rb') as f:
+log.info("Autocompeter")
+with open(os.path.join(trialstreamer.DATA_ROOT, 'pico_cui_autocompleter.pck'), 'rb') as f:
     pico_trie = pickle.load(f)
-
-with open(os.path.join(trialstreamer.DATA_ROOT, 'drugs_from_class.pck'), 'rb') as f:
-    drugs_from_class = pickle.load(f)
-
-with open(os.path.join(trialstreamer.DATA_ROOT, 'mesh_subtrees.pck'), 'rb') as f:
+log.info("done!")
+# with open(os.path.join(trialstreamer.DATA_ROOT, 'drugs_from_class.pck'), 'rb') as f:
+#     drugs_from_class = pickle.load(f)
+#  RxNorm should solve this one in subtrees (to test more)
+log.info("Metathesaurus trees")
+with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
-
-def get_subtree(mesh_ui):
+log.info("done!")
+def get_subtree(cui):
     try:        
-        decs = nx.descendants(subtrees, mesh_ui)
+        decs = nx.descendants(subtrees, cui)
     except nx.exception.NetworkXError:
         decs = set()
-    decs.add(mesh_ui)
-    if mesh_ui in drugs_from_class:
-        decs.update(drugs_from_class[mesh_ui])
+    decs.add(cui)
+    # if mesh_ui in drugs_from_class:
+    #     decs.update(drugs_from_class[mesh_ui])
     return decs
 
 def auth(api_key, required_scopes):
@@ -70,8 +83,8 @@ def autocomplete(q):
         encountered = set()
         out = []
         for r in l:
-            if r['mesh_pico_display'] not in encountered:
-                encountered.add(r['mesh_pico_display'])
+            if r['cui_pico_display'] not in encountered:
+                encountered.add(r['cui_pico_display'])
                 out.append(r)
         return out
 
@@ -158,16 +171,16 @@ def picosearch(body):
     for c in query:
         
         if expand_terms:
-            expansion = get_subtree(c['mesh_ui']) 
+            expansion = get_subtree(c['cui']) 
         else:
-            expansion = [c['mesh_ui']]
+            expansion = [c['cui']]
                 
         subtree_builder = []
         
         for c_i in expansion:
             
             field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))                                                                        
-            contents = sql.Literal(Json([{"mesh_ui": c_i}])                           )
+            contents = sql.Literal(Json([{"cui": c_i}])                           )
             subtree_builder.append(sql.SQL(' @> ').join((field, contents)))
                                                                                                                                                                 
         builder.append(sql.SQL('(') + sql.SQL(' OR ').join(subtree_builder) + sql.SQL(')'))
@@ -178,7 +191,7 @@ def picosearch(body):
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_balanced=true;")
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_balanced=true limit 250;")
                                                                             
     out = []
 
@@ -187,7 +200,7 @@ def picosearch(body):
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
-        with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+        with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_cui") as cur:
             cur.execute(select + params + join)
             print((select + params + join).as_string(cur))
             for i, row in enumerate(cur):
@@ -243,7 +256,7 @@ def picosearch(body):
 
 
     ### START COVID-19 PREPRINTS
-    if any(((q_i['mesh_ui']=="C000657245") and (q_i['field']=="population") for q_i in query)):
+    if any(((q_i['cui']=="TS-COV19") and (q_i['field']=="population") for q_i in query)):
 
         if retmode=='json-short':
             cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")

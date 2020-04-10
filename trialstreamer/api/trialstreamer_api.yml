@@ -39,7 +39,7 @@
                         }
                     }
                 },
-                "summary": "Suggests MeSH terms and PICOs from free-text query stem",
+                "summary": "Suggests CUIs and PICOs from free-text query stem",
                 "operationId": "trialstreamer.cnxapp.autocomplete",
                 "parameters": [
                     {
@@ -264,17 +264,17 @@
                         "outcomes"
                     ]
                 },
-                "mesh_ui": {
+                "cui": {
                     "type": "string",
-                    "pattern": "[A-Z][0-9]+"
+                    "pattern": "[A-Z0-9\\-]+"
                 },
-                "mesh_term": {
+                "cui_str": {
                     "type": "string"
                 }
             },
             "required": [
                 "field",
-                "mesh_ui"
+                "cui"
             ]
         },
         "article": {
@@ -321,14 +321,14 @@
                 "count": {
                     "type": "integer"
                 },
-                "mesh_ui": {
+                "cui": {
                     "type": "string",
-                    "pattern": "[A-Z][0-9]+"
+                    "pattern": "[A-Z0-9\\-]+"
                 },
-                "mesh_term": {
+                "cui_str": {
                     "type": "string"
                 },
-                "mesh_pico_display": {
+                "cui_pico_display": {
                     "type": "string"
                 }
             }
