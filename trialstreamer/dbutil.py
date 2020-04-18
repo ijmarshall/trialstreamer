@@ -108,6 +108,7 @@ create table if not exists ictrp (
             ti text,
             year integer,
             ictrp_data jsonb,
+            url varchar(512),
             population jsonb,
             interventions jsonb,
             outcomes jsonb,
@@ -116,7 +117,7 @@ create table if not exists ictrp (
             outcomes_mesh jsonb,
             target_size varchar(10),
             is_rct varchar(16),
-            is_recruiting varchar(16),
+            is_recruiting varchar(32),
             countries jsonb,
             date_registered timestamp,
             source_filename varchar(256)
