@@ -1,3 +1,5 @@
+import urllib 
+
 import logging
 logging.basicConfig(level="INFO", format='[%(levelname)s] %(name)s %(asctime)s: %(message)s')
 log = logging.getLogger(__name__)
@@ -317,8 +319,18 @@ def get_trial(uuid):
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # first try pubmid @TODO probably we can ascertain this w/a regular expression and avoid this
             # brute force means of checking if it's a pmid.
-            select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE (pm.pmid = '{0}' AND pa.pmid = '{0}')".format(uuid))
+            # @TODO this flow is in general pretty terrible; we should really explicitly flag
+            # which table/source the requested uuid (or again, infer based on the str)
+            # instead of this terrible nested series of attempts. 
+            # byron is to blame.
+            select = sql.SQL("""
+                SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, 
+                pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, 
+                pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, 
+                pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa 
+                WHERE (pm.pmid = '{0}' AND pa.pmid = '{0}')""".format(uuid))
             cur.execute(select)
+
             if cur.rowcount > 0:
                 # then we found a trial in the pubmed table
                 for i, row in enumerate(cur):
@@ -337,17 +349,41 @@ def get_trial(uuid):
                         "num_randomized": row['num_randomized'],
                         "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
                         "article_type": "journal article"})
-            else: 
-                # didn't find it; try ICTRP
-                ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE pa.regid = '{0}'".format(uuid))
-                cur.execute(ictrp_select)
+                return out
+            
+
+            # didn't find it; try ICTRP
+            ictrp_select = sql.SQL("""
+                SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, 
+                pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, 
+                pa.date_registered FROM ictrp as pa WHERE pa.regid = '{0}'""".format(uuid))
+            cur.execute(ictrp_select)
+            if cur.rowcount > 0:
                 for i, row in enumerate(cur):                    
                     out_d = dict(row)
                     out_d['article_type']="trial registration"
                     out.append(out_d)
+                return out 
 
-    
-    # note that if we fail on both PubMed and ICTRP table this is just an empty list
+            # finally, resort to medarxiv
+            # I was unable to get swagger to cooperate with allowing even *escaped* fwd slashes
+            # -- it just would not route them here. 
+            # uuid = urllib.parse.unquote(uuid) # because DOIs contain fwd slashes that need to be escaped
+            #
+            # For now, I have done the terrible thing of assuming we have swapped them with `-`. sorry.
+            uuid = uuid.replace("-", "/")
+            med_arxiv_select = sql.SQL("""SELECT ti, ab, year, punchline_text, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias, low_ac_bias, low_bpp_bias, punchline_text FROM medrxiv_covid19 WHERE doi='{0}'""".format(uuid))
+            
+            cur.execute(med_arxiv_select)
+            
+            if cur.rowcount > 0:
+                for i, row in enumerate(cur):  
+                    out_d = dict(row)
+                    out_d['article_type']="preprint"
+                    out.append(out_d)
+                return out
+
+    # if we fail to find this uuid anywhere, return an empty list
     return out
     
 
