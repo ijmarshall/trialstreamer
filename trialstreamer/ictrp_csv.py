@@ -167,7 +167,7 @@ rcts = ['adaptive randomization',
  'phase iv',
  'pilot rct',
  'ramdomised controlled trial',
- 'rct',        
+ 'rct',
  'random allocation',
  'random number table',
  'randomised',
@@ -202,10 +202,10 @@ def is_rct(study_design):
     sd_clean = cleanup(study_design.lower())
 
     if any((r in sd_clean for r in non_rcts)):
-        # first get the definite no's    
+        # first get the definite no's
         return "non-RCT"
     elif any((r in sd_clean for r in rcts)):
-        # then get the likely yes's    
+        # then get the likely yes's
         return "RCT"
     else:
         return "unknown"
@@ -223,35 +223,35 @@ def guess_registry(raw):
 
 
 def parsenull(s, default='unknown'):
-	if s=='NULL':
-		return default
-	else:
-		return s
+        if s=='NULL':
+                return default
+        else:
+                return s
 
 def parse_ictrp(ictrp_data):
-            
-    out = {"regid": ictrp_data['study_id']}    
+
+    out = {"regid": ictrp_data['study_id']}
     out["ti"] = parsenull(ictrp_data['scientific_title']).strip()
 
-    
+
     out["population"] = [r.strip() for r in parsenull(ictrp_data["health_conditions"]).split(';')]
     out["interventions"] = [r.strip() for r in parsenull(ictrp_data["interventions"]).split(';')]
 
 
     out['outcomes'] = []
     if ictrp_data["primary_outcome"]!='NULL':
-    	out["outcomes"] = [r.strip() for r in ictrp_data["primary_outcome"].split(';')]
+        out["outcomes"] = [r.strip() for r in ictrp_data["primary_outcome"].split(';')]
     if ictrp_data["secondary_outcomes"]!='NULL':
-    	out["outcomes"] += [r.strip() for r in ictrp_data["secondary_outcomes"].split(';')]
+        out["outcomes"] += [r.strip() for r in ictrp_data["secondary_outcomes"].split(';')]
 
     out["is_rct"] = is_rct(ictrp_data.get('study_design'))
-    
+
     out["is_recruiting"] = parsenull(ictrp_data["recruitment_status"]).lower()
-    
+
     try:
         out["target_size"] = str(int(ictrp_data['target_size']))
         if len(out["target_size"]) > 10:
-            out['target_size'] = "unknown"    
+            out['target_size'] = "unknown"
     except:
         out['target_size'] = "unknown"
 
@@ -277,7 +277,7 @@ def parse_ictrp(ictrp_data):
             out[f"{f}_mesh"] = []
 
     out['url'] = ictrp_data.get('url')
-        
+
     return out
 
 
@@ -312,34 +312,34 @@ def upload_to_postgres(fn, force_update=False):
         already_done = set((r['regid'] for r in cur))
 
     with zipfile.ZipFile(fn) as zipf:
-	    csv_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.csv'][0]
-	    readme_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.txt'][0]
-	    
-	    with io.TextIOWrapper(zipf.open(csv_fn), encoding="utf-8-sig") as csvf:
+            csv_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.csv'][0]
+            readme_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.txt'][0]
 
-	        reader = csv.DictReader(csvf, fieldnames=headers, delimiter=",")
-	        for i, r in tqdm.tqdm(enumerate(reader), desc="parsing ICTRP entries"):
+            with io.TextIOWrapper(zipf.open(csv_fn), encoding="utf-8-sig") as csvf:
 
-	        	if i % 500 == 0:
-		            dbutil.db.commit()	            
-	                 
-		        if r['study_id'] in already_done:
-		            continue
+                reader = csv.DictReader(csvf, fieldnames=headers, delimiter=",")
+                for i, r in tqdm.tqdm(enumerate(reader), desc="parsing ICTRP entries"):
 
-		        if is_rct(r.get('study_design'))!='RCT':
-		        	continue
+                        if i % 500 == 0:
+                            dbutil.db.commit()
 
-        		p = parse_ictrp(r)
-		        row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
-		            json.dumps(p['outcomes']), json.dumps(p['population_mesh']), 
-		            json.dumps(p['interventions_mesh']), json.dumps(p['outcomes_mesh']),
-		            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['year'],
-		            json.dumps(p['countries']), json.dumps([]), fn, p['url']) # temporarily we will not have the full parsed data
+                        if r['study_id'] in already_done:
+                            continue
 
-		        cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-		            row)
+                        if is_rct(r.get('study_design'))!='RCT':
+                                continue
 
-		        already_done.add(r['study_id'])
+                        p = parse_ictrp(r)
+                        row = (p['regid'], p['ti'], json.dumps(p['population']), json.dumps(p['interventions']),
+                            json.dumps(p['outcomes']), json.dumps(p['population_mesh']),
+                            json.dumps(p['interventions_mesh']), json.dumps(p['outcomes_mesh']),
+                            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['year'],
+                            json.dumps(p['countries']), json.dumps([]), fn, p['url']) # temporarily we will not have the full parsed data
+
+                        cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                            row)
+
+                        already_done.add(r['study_id'])
 
     cur.close()
     dbutil.db.commit()
@@ -351,10 +351,10 @@ def update(force_update=False):
     if fn is None:
         log.info('no new data found')
         return None
-    log.info('found new file {}... processing'.format(fn['fn']))    
-    download_date = datetime.datetime.now()    
+    log.info('found new file {}... processing'.format(fn['fn']))
+    download_date = datetime.datetime.now()
     log.info('Parsing to postgres {}'.format(fn['fn']))
     upload_to_postgres(fn['fn'], force_update=force_update)
-    dbutil.log_update(update_type='ictrp', source_filename=local_fn, source_date=fn['date'], download_date=download_date)
+    dbutil.log_update(update_type='ictrp', source_filename=fn['fn'], source_date=fn['date'], download_date=download_date)
 
 
