@@ -104,7 +104,7 @@ create index if not exists idx_pm_status on pubmed(pm_status)
 
 create table if not exists ictrp (
             id serial primary key,
-            regid varchar(32) not null,
+            regid varchar(32) unique,
             ti text,
             year integer,
             ictrp_data jsonb,
@@ -117,7 +117,7 @@ create table if not exists ictrp (
             outcomes_mesh jsonb,
             target_size varchar(10),
             is_rct varchar(16),
-            is_recruiting varchar(32),
+            is_recruiting varchar(64),
             countries jsonb,
             date_registered timestamp,
             source_filename varchar(256)

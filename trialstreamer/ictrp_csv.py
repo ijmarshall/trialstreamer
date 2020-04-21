@@ -281,12 +281,23 @@ def parse_ictrp(ictrp_data):
     return out
 
 
+def get_date_from_fn(fn):
+    bn = os.path.basename(fn)
+    if bn.startswith('ICTRPFullExport'):
+        # full update
+        return parse("ICTRPFullExport-{:d}-{:tg}.zip", bn)[1]
+    elif bn.startswith('ICTRPWeek'):
+        # partial update
+        return datetime.datetime.strptime(bn, "ICTRPWeek%d%B%Y.zip") 
+
+
 def check_if_new_data():
 
     # first find out our most recent filename and date
     lu = dbutil.last_update("ictrp")
     fns = glob.glob(os.path.join(config.ICTRP_DATA_PATH, '*.zip'))
-    fn_d = [{"fn": fn, "date": parse("ICTRPFullExport-{:d}-{:tg}.zip", os.path.basename(fn))[1]} for fn in fns]
+
+    fn_d = [{"fn": fn, "date": get_date_from_fn(fn)} for fn in fns]
 
     most_recent_fn = sorted(fn_d, key=lambda x: (x['date']), reverse=True)[0]
 
@@ -313,7 +324,6 @@ def upload_to_postgres(fn, force_update=False):
 
     with zipfile.ZipFile(fn) as zipf:
 	    csv_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.csv'][0]
-	    readme_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.txt'][0]
 	    
 	    with io.TextIOWrapper(zipf.open(csv_fn), encoding="utf-8-sig") as csvf:
 
@@ -336,7 +346,7 @@ def upload_to_postgres(fn, force_update=False):
 		            p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['year'],
 		            json.dumps(p['countries']), json.dumps([]), fn, p['url']) # temporarily we will not have the full parsed data
 
-		        cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+		        cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (regid) DO UPDATE SET ti=EXCLUDED.ti, population=EXCLUDED.population, interventions=EXCLUDED.interventions, outcomes=EXCLUDED.outcomes, population_mesh=EXCLUDED.population_mesh, interventions_mesh=EXCLUDED.interventions_mesh, outcomes_mesh=EXCLUDED.outcomes_mesh, is_rct=EXCLUDED.is_rct, is_recruiting=EXCLUDED.is_recruiting, target_size=EXCLUDED.target_size, date_registered=EXCLUDED.date_registered, year=EXCLUDED.year, countries=EXCLUDED.countries, ictrp_data=EXCLUDED.ictrp_data, source_filename=EXCLUDED.source_filename, url=EXCLUDED.url;",
 		            row)
 
 		        already_done.add(r['study_id'])
@@ -345,7 +355,7 @@ def upload_to_postgres(fn, force_update=False):
     dbutil.db.commit()
 
 
-def update(force_update=False):
+def update_full(force_update=False):
     log.info('checking for latest data')
     fn = check_if_new_data()
     if fn is None:
@@ -356,5 +366,4 @@ def update(force_update=False):
     log.info('Parsing to postgres {}'.format(fn['fn']))
     upload_to_postgres(fn['fn'], force_update=force_update)
     dbutil.log_update(update_type='ictrp', source_filename=local_fn, source_date=fn['date'], download_date=download_date)
-
 
