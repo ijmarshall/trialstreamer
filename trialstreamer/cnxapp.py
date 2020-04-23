@@ -1,9 +1,9 @@
-import urllib 
+import urllib
 
 import logging
 logging.basicConfig(level="INFO", format='[%(levelname)s] %(name)s %(asctime)s: %(message)s')
 log = logging.getLogger(__name__)
-            
+
 log.info("Welcome to the Trialstreamer Server!")
 
 import trialstreamer
@@ -47,14 +47,18 @@ log.info("Metathesaurus trees")
 with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
 log.info("done!")
-def get_subtree(cui):
-    try:        
-        decs = nx.descendants(subtrees, cui)
+
+
+
+def get_subtree(cui, levels=1):
+    try:
+        decs = set(subtrees.successors(cui))
     except nx.exception.NetworkXError:
         decs = set()
+    if levels > 1:
+        for c in decs.copy():
+            decs.update(get_subtree(c, levels=levels-1))
     decs.add(cui)
-    # if mesh_ui in drugs_from_class:
-    #     decs.update(drugs_from_class[mesh_ui])
     return decs
 
 def auth(api_key, required_scopes):
@@ -113,7 +117,7 @@ def meta():
         cur.execute("select count_rct_precise from pubmed_rct_count;")
         num_rcts = cur.fetchone()['count_rct_precise']
 
-    return {"last_updated": last_updated, "num_rcts": f'{num_rcts:,}'}
+    return {"last_updated": last_updated, "num_rcts": f"{num_rcts:,}"}
 
 
 def covid19():
@@ -161,7 +165,7 @@ def picosearch(body):
     gets brief display info for articles matching a structured PICO query
     """
     query = body['terms']
-    
+
     expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
@@ -171,30 +175,30 @@ def picosearch(body):
     builder = []
 
     for c in query:
-        
+
         if expand_terms:
-            expansion = get_subtree(c['cui']) 
+            expansion = get_subtree(c['cui'], levels=1)
         else:
             expansion = [c['cui']]
-                
+
         subtree_builder = []
-        
+
         for c_i in expansion:
-            
-            field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))                                                                        
+
+            field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))
             contents = sql.Literal(Json([{"cui": c_i}])                           )
             subtree_builder.append(sql.SQL(' @> ').join((field, contents)))
-                                                                                                                                                                
+
         builder.append(sql.SQL('(') + sql.SQL(' OR ').join(subtree_builder) + sql.SQL(')'))
-    
+
     params = sql.SQL(' AND ').join(builder)
-                                                                                                                                                    
+
     if retmode=='json-short':
         select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true limit 250;")
-                                                                            
+
     out = []
 
 
@@ -237,7 +241,7 @@ def picosearch(body):
         ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
     elif retmode=='ris':
         ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
-    ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")                                                                            
+    ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")
 
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
@@ -266,7 +270,7 @@ def picosearch(body):
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
 
-                                                                            
+
 
         with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
@@ -311,7 +315,7 @@ def picosearch(body):
 
 def get_trial(uuid):
     print(uuid)
-    
+
     out = []
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
                host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
@@ -321,13 +325,13 @@ def get_trial(uuid):
             # brute force means of checking if it's a pmid.
             # @TODO this flow is in general pretty terrible; we should really explicitly flag
             # which table/source the requested uuid (or again, infer based on the str)
-            # instead of this terrible nested series of attempts. 
+            # instead of this terrible nested series of attempts.
             # byron is to blame.
             select = sql.SQL("""
-                SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, 
-                pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, 
-                pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, 
-                pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa 
+                SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes,
+                pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias,
+                pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal,
+                pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa
                 WHERE (pm.pmid = '{0}' AND pa.pmid = '{0}')""".format(uuid))
             cur.execute(select)
 
@@ -350,34 +354,34 @@ def get_trial(uuid):
                         "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
                         "article_type": "journal article"})
                 return out
-            
+
 
             # didn't find it; try ICTRP
             ictrp_select = sql.SQL("""
-                SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, 
-                pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, 
+                SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh,
+                pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries,
                 pa.date_registered FROM ictrp as pa WHERE pa.regid = '{0}'""".format(uuid))
             cur.execute(ictrp_select)
             if cur.rowcount > 0:
-                for i, row in enumerate(cur):                    
+                for i, row in enumerate(cur):
                     out_d = dict(row)
                     out_d['article_type']="trial registration"
                     out.append(out_d)
-                return out 
+                return out
 
             # finally, resort to medarxiv
             # I was unable to get swagger to cooperate with allowing even *escaped* fwd slashes
-            # -- it just would not route them here. 
+            # -- it just would not route them here.
             # uuid = urllib.parse.unquote(uuid) # because DOIs contain fwd slashes that need to be escaped
             #
             # For now, I have done the terrible thing of assuming we have swapped them with `-`. sorry.
             uuid = uuid.replace("-", "/")
             med_arxiv_select = sql.SQL("""SELECT ti, ab, year, punchline_text, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias, low_ac_bias, low_bpp_bias, punchline_text FROM medrxiv_covid19 WHERE doi='{0}'""".format(uuid))
-            
+
             cur.execute(med_arxiv_select)
-            
+
             if cur.rowcount > 0:
-                for i, row in enumerate(cur):  
+                for i, row in enumerate(cur):
                     out_d = dict(row)
                     out_d['article_type']="preprint"
                     out.append(out_d)
@@ -385,7 +389,7 @@ def get_trial(uuid):
 
     # if we fail to find this uuid anywhere, return an empty list
     return out
-    
+
 
 
 import connexion
