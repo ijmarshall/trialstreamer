@@ -162,9 +162,12 @@ create table if not exists update_log (
 create index if not exists idx_pmid_dois on pmid_dois (pmid);
 create index if not exists idx_pm_data on pubmed using gin((pm_data->'mesh'))
     where is_rct_balanced=true;
-create index if not exists idx_population_mesh on pubmed_annotations using gin((population_mesh));
-create index if not exists idx_interventions_mesh on pubmed_annotations using gin((interventions_mesh));
-create index if not exists idx_outcomes_mesh on pubmed_annotations using gin((outcomes_mesh));
+create index if not exists idx_ictrp_pop on pubmed_annotations using gin(population_mesh jsonb_path_ops);
+create index if not exists idx_ictrp_int on pubmed_annotations using gin(interventions_mesh jsonb_path_ops);
+create index if not exists idx_ictrp_out on pubmed_annotations using gin(outcomes_mesh jsonb_path_ops);
+create index if not exists idx_pubmed_pop on pubmed_annotations using gin(population_mesh jsonb_path_ops);
+create index if not exists idx_pubmed_int on pubmed_annotations using gin(interventions_mesh jsonb_path_ops);
+create index if not exists idx_pubmed_out on pubmed_annotations using gin(outcomes_mesh jsonb_path_ops);
 create index if not exists idx_ti_vec on pubmed using gin(to_tsvector('english'
     , ti)) where is_rct_balanced=true;
 create index if not exists idx_ti_ab_vec on pubmed using
