@@ -40,6 +40,7 @@ def make_tables():
             score_svm_ptyp real,
             score_svm_cnn_ptyp real,
             rct_probability real,
+            updated_date timestamp,
             source_filename varchar(256)
             );
 
@@ -120,7 +121,8 @@ create table if not exists ictrp (
             is_recruiting varchar(64),
             countries jsonb,
             date_registered timestamp,
-            source_filename varchar(256)
+            source_filename varchar(256),
+            updated_date timestamp
             );
 
 create table if not exists upw (
@@ -206,13 +208,14 @@ create table if not exists medrxiv_covid19 (
             interventions_mesh jsonb,
             outcomes_mesh jsonb,
             authors jsonb,
-            source varchar(32),           
+            source varchar(32),
             num_randomized integer,
             low_rsg_bias boolean,
             low_ac_bias boolean,
             low_bpp_bias boolean,
             punchline_text text,
-            effect varchar(22)
+            effect varchar(22),
+            updated_date timestamp
             );
 
              create table if not exists pubmed_bert (
