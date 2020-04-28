@@ -321,7 +321,7 @@ def upload_to_postgres(fn, force_update=False):
     else:
         cur.execute("SELECT regid from ictrp;")
         already_done = set((r['regid'] for r in cur))
-
+    timestamp = datetime.datetime.now()
     with zipfile.ZipFile(fn) as zipf:
 	    csv_fn = [i.filename for i in zipf.infolist() if os.path.splitext(i.filename)[-1]=='.csv'][0]	    
 	    with io.TextIOWrapper(zipf.open(csv_fn), encoding="utf-8-sig") as csvf:
@@ -342,10 +342,10 @@ def upload_to_postgres(fn, force_update=False):
                         json.dumps(p['outcomes']), json.dumps(p['population_mesh']),
                         json.dumps(p['interventions_mesh']), json.dumps(p['outcomes_mesh']),
                         p['is_rct'], p['is_recruiting'], p['target_size'], p['date_registered'], p['year'],
-                        json.dumps(p['countries']), json.dumps([]), fn, p['url']) # temporarily we will not have the full parsed data
+                        json.dumps(p['countries']), json.dumps([]), fn, p['url'], timestamp) # temporarily we will not have the full parsed data
 
 
-                    cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (regid) DO UPDATE SET ti=EXCLUDED.ti, population=EXCLUDED.population, interventions=EXCLUDED.interventions, outcomes=EXCLUDED.outcomes, population_mesh=EXCLUDED.population_mesh, interventions_mesh=EXCLUDED.interventions_mesh, outcomes_mesh=EXCLUDED.outcomes_mesh, is_rct=EXCLUDED.is_rct, is_recruiting=EXCLUDED.is_recruiting, target_size=EXCLUDED.target_size, date_registered=EXCLUDED.date_registered, year=EXCLUDED.year, countries=EXCLUDED.countries, ictrp_data=EXCLUDED.ictrp_data, source_filename=EXCLUDED.source_filename, url=EXCLUDED.url;",
+                    cur.execute("INSERT INTO ictrp (regid, ti, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, is_rct, is_recruiting, target_size, date_registered, year, countries, ictrp_data, source_filename, url, update_date) VALUES (%s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (regid) DO UPDATE SET ti=EXCLUDED.ti, population=EXCLUDED.population, interventions=EXCLUDED.interventions, outcomes=EXCLUDED.outcomes, population_mesh=EXCLUDED.population_mesh, interventions_mesh=EXCLUDED.interventions_mesh, outcomes_mesh=EXCLUDED.outcomes_mesh, is_rct=EXCLUDED.is_rct, is_recruiting=EXCLUDED.is_recruiting, target_size=EXCLUDED.target_size, date_registered=EXCLUDED.date_registered, year=EXCLUDED.year, countries=EXCLUDED.countries, ictrp_data=EXCLUDED.ictrp_data, source_filename=EXCLUDED.source_filename, url=EXCLUDED.url, update_date=EXCLUDED.update_date;",
                         row)
 
                     already_done.add(r['study_id'])
