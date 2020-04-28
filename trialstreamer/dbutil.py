@@ -80,9 +80,7 @@ create table if not exists pubmed_annotations (
     population_berts float[],
     interventions_berts float[],
     outcomes_berts float[],
-    low_rsg_bias boolean,
-    low_ac_bias boolean,
-    low_bpp_bias boolean,
+    prob_low_bias real,
     punchline_text text,
     effect varchar(22)
 );
@@ -210,10 +208,8 @@ create table if not exists medrxiv_covid19 (
             authors jsonb,
             source varchar(32),
             num_randomized integer,
-            low_rsg_bias boolean,
-            low_ac_bias boolean,
-            low_bpp_bias boolean,
             punchline_text text,
+            prob_low_bias real,
             effect varchar(22),
             updated_date timestamp
             );
