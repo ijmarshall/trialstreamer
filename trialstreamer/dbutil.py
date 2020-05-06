@@ -67,8 +67,8 @@ def make_tables():
             source_filename varchar(256)
             );
 
-create unique index pubmed_pmid on pubmed (pmid);
-create unique index pubmed_id on pubmed (id);
+create unique index if not exists pubmed_pmid on pubmed (pmid);
+create unique index if not exists pubmed_id on pubmed (id);
 
 
 create table if not exists pubmed_annotations (
