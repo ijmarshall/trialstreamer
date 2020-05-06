@@ -165,6 +165,8 @@ def picosearch(body):
     gets brief display info for articles matching a structured PICO query
     """
     query = body['terms']
+    ordering = body.get('order', 'year')
+    assert ordering in set(['year', 'score']), "Ordering not one of pdate or score"
 
     expand_terms = body.get("expand_terms", True)
 
@@ -186,7 +188,7 @@ def picosearch(body):
         for c_i in expansion:
 
             field = sql.SQL('.').join((sql.Identifier("pa"), sql.Identifier(f"{c['field']}_mesh")))
-            contents = sql.Literal(Json([{"cui": c_i}])                           )
+            contents = sql.Literal(Json([{"cui": c_i}]))
             subtree_builder.append(sql.SQL(' @> ').join((field, contents)))
 
         builder.append(sql.SQL('(') + sql.SQL(' OR ').join(subtree_builder) + sql.SQL(')'))
@@ -194,10 +196,16 @@ def picosearch(body):
     params = sql.SQL(' AND ').join(builder)
 
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.prob_low_rob, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.prob_low_rob, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois, pa.prob_low_rob * pa.num_randomized as score FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true limit 250;")
+
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true")
+
+    if ordering == 'score':
+        join = sql.SQL("order by score desc nulls last limit 250;")
+    elif ordering == 'year':
+        join = sql.SQL("order by year desc nulls last limit 250;")
 
     out = []
 
