@@ -194,7 +194,7 @@ def picosearch(body):
     params = sql.SQL(' AND ').join(builder)
 
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.prob_low_rob, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true limit 250;")
@@ -223,6 +223,7 @@ def picosearch(body):
                         "low_rsg_bias": row['low_rsg_bias'],
                         "low_ac_bias": row['low_ac_bias'],
                         "low_bpp_bias": row['low_bpp_bias'],
+                        "prob_low_rob": row['prob_low_rob'],
                         "num_randomized": row['num_randomized'],
                         "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
                         "article_type": "journal article"})
@@ -265,7 +266,7 @@ def picosearch(body):
     if any(((q_i['cui']=="TS-COV19") and (q_i['field']=="population") for q_i in query)):
 
         if retmode=='json-short':
-            cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")
+            cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.prob_low_rob, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")
         elif retmode=='ris':
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
@@ -289,9 +290,7 @@ def picosearch(body):
                             "population_mesh": row['population_mesh'],
                             "interventions_mesh": row['interventions_mesh'],
                             "outcomes_mesh": row['outcomes_mesh'],
-                            "low_rsg_bias": row['low_rsg_bias'],
-                            "low_ac_bias": row['low_ac_bias'],
-                            "low_bpp_bias": row['low_bpp_bias'],
+                            "prob_low_rob": row['prob_low_rob'],
                             "num_randomized": row['num_randomized'],
                             "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
                             "article_type": "preprint"})
