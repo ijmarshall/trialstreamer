@@ -67,6 +67,10 @@ def make_tables():
             source_filename varchar(256)
             );
 
+create unique index pubmed_pmid on pubmed (pmid);
+create unique index pubmed_id on pubmed (id);
+
+
 create table if not exists pubmed_annotations (
     id serial primary key,
     pmid varchar(16) unique,
@@ -168,10 +172,8 @@ create index if not exists idx_ictrp_out on pubmed_annotations using gin(outcome
 create index if not exists idx_pubmed_pop on pubmed_annotations using gin(population_mesh jsonb_path_ops);
 create index if not exists idx_pubmed_int on pubmed_annotations using gin(interventions_mesh jsonb_path_ops);
 create index if not exists idx_pubmed_out on pubmed_annotations using gin(outcomes_mesh jsonb_path_ops);
-create index if not exists idx_ti_vec on pubmed using gin(to_tsvector('english'
-    , ti)) where is_rct_balanced=true;
-create index if not exists idx_ti_ab_vec on pubmed using
-    gin(to_tsvector('english', (ti || '  ' || ab))) where is_rct_balanced=true;
+create index if not exists idx_ti_vec on pubmed using gin(to_tsvector('english' , ti)) where is_rct_balanced=true;
+create index if not exists idx_ti_ab_vec on pubmed using gin(to_tsvector('english', (ti || '  ' || ab))) where is_rct_balanced=true;
 
 
 create materialized view if not exists pubmed_year_counts AS
@@ -214,11 +216,11 @@ create table if not exists medrxiv_covid19 (
             updated_date timestamp
             );
 
-             create table if not exists pubmed_bert (
-                id serial primary key,
-                pmid varchar(16),
-                scibert jsonb
-                );
+create table if not exists pubmed_bert (
+           id serial primary key,
+           pmid varchar(16),
+           scibert jsonb
+);
 
 
 
