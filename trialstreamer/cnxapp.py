@@ -196,7 +196,7 @@ def picosearch(body):
     params = sql.SQL(' AND ').join(builder)
 
     if retmode=='json-short':
-        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.prob_low_rob, pa.low_rsg_bias, pa.low_ac_bias, pa.low_bpp_bias, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois, pa.prob_low_rob * pa.num_randomized as score FROM pubmed as pm, pubmed_annotations as pa WHERE ")
+        select = sql.SQL("SELECT pm.pmid, pm.ti, pm.ab, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.num_randomized, pa.prob_low_rob, pa.punchline_text, pm.pm_data->'authors' as authors, pm.pm_data->'journal' as journal, pm.pm_data->'dois' as dois, pa.prob_low_rob * pa.num_randomized as score FROM pubmed as pm, pubmed_annotations as pa WHERE ")
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
 
@@ -225,12 +225,6 @@ def picosearch(body):
                         "interventions": row['interventions'],
                         "outcomes": row['outcomes'],
                         "dois": row['dois'],
-                        "population_mesh": row['population_mesh'],
-                        "interventions_mesh": row['interventions_mesh'],
-                        "outcomes_mesh": row['outcomes_mesh'],
-                        "low_rsg_bias": row['low_rsg_bias'],
-                        "low_ac_bias": row['low_ac_bias'],
-                        "low_bpp_bias": row['low_bpp_bias'],
                         "prob_low_rob": row['prob_low_rob'],
                         "num_randomized": row['num_randomized'],
                         "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
@@ -247,7 +241,7 @@ def picosearch(body):
 
     ### ICTRP
     if retmode=='json-short':
-        ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
+        ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
     elif retmode=='ris':
         ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
     ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")
@@ -274,7 +268,7 @@ def picosearch(body):
     if any(((q_i['cui']=="TS-COV19") and (q_i['field']=="population") for q_i in query)):
 
         if retmode=='json-short':
-            cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.prob_low_rob, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")
+            cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.num_randomized, pa.prob_low_rob, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")
         elif retmode=='ris':
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
@@ -295,9 +289,6 @@ def picosearch(body):
                             "interventions": row['interventions'],
                             "dois": [row['doi']],
                             "outcomes": row['outcomes'],
-                            "population_mesh": row['population_mesh'],
-                            "interventions_mesh": row['interventions_mesh'],
-                            "outcomes_mesh": row['outcomes_mesh'],
                             "prob_low_rob": row['prob_low_rob'],
                             "num_randomized": row['num_randomized'],
                             "abbrev_dict": schwartz_hearst.extract_abbreviation_definition_pairs(doc_text=row['ab']),
