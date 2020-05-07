@@ -163,19 +163,25 @@ def get_medrxiv_cite(authors, source, year):
 def picosearch(body):
     """
     gets brief display info for articles matching a structured PICO query
+
     """
+    log.info('recevied picosearch query')
+
     query = body['terms']
-    ordering = body.get('order', 'year')
+    ordering = body.get('order', 'score')
     assert ordering in set(['year', 'score']), "Ordering not one of pdate or score"
 
+    log.info('expanding query')
     expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
+        log.info('zero length query, empty return')
         return []
     retmode = body.get("retmode", "json-short")
 
     builder = []
 
+    log.info('building SQL')
     for c in query:
 
         if expand_terms:
@@ -203,20 +209,23 @@ def picosearch(body):
     join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true")
 
     if ordering == 'score':
-        join = sql.SQL("order by score desc nulls last limit 250;")
+        join += sql.SQL(" order by score desc nulls last limit 250;")
     elif ordering == 'year':
-        join = sql.SQL("order by year desc nulls last limit 250;")
+        join += sql.SQL(" order by year desc nulls last limit 250;")
 
     out = []
 
-
+    log.info('connecting to DB')
     # PUBMED
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
+        log.info('creating cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_cui") as cur:
+            log.info('running query server side')
             cur.execute(select + params + join)
-            print((select + params + join).as_string(cur))
+            log.info((select + params + join).as_string(cur))
+            log.info('parsing results')
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
@@ -240,17 +249,22 @@ def picosearch(body):
 
 
     ### ICTRP
+    log.info('building ICTRP SQL')
     if retmode=='json-short':
         ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
     elif retmode=='ris':
         ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
     ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")
 
+    log.info('connecting to database (ICTRP)')
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
+        log.info('creating ICTRP cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
+            log.info('running ICTRP query')
             cur.execute(ictrp_select + params + ictrp_join)
+            log.info('parsing ICTRP results')
             print((ictrp_select + params + ictrp_join).as_string(cur))
             for i, row in enumerate(cur):
                 if retmode=='json-short':
@@ -299,6 +313,7 @@ def picosearch(body):
 
 
 
+    log.info('returning results')
     if retmode=='json-short':
         return out
     elif retmode=='ris':
