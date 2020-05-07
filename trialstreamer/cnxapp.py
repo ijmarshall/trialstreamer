@@ -44,7 +44,7 @@ log.info("done!")
 #     drugs_from_class = pickle.load(f)
 #  RxNorm should solve this one in subtrees (to test more)
 log.info("Metathesaurus trees")
-with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
+with open(os.path.join(trialstreamer.DATA_ROOT, 'minimap/cui_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
 log.info("done!")
 
