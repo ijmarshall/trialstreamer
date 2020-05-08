@@ -21,8 +21,7 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), '
 def get_articles():
     url = "https://connect.medrxiv.org/relate/collection_json.php?grp=181"
     feed = requests.get(url)
-    feed_parsed = json.loads(feed.text)
-    
+    feed_parsed = json.loads(feed.text)    
     articles = []
     meta = []
 
@@ -31,6 +30,15 @@ def get_articles():
         meta.append({"date": a['rel_date'], "doi": a['rel_doi'], "url": a['rel_link'],
                          "year": datetime.datetime.strptime(a['rel_date'], "%Y-%m-%d").year,
                     "authors": a['rel_authors'], "source": a["rel_site"]})
+
+    # add any key manually added papers for now from the local json
+    with open(os.path.join(trialstreamer.DATA_ROOT, 'manual_preprints.json'), 'r') as f:
+        extras = json.load(f)
+
+    for e in extras:
+        articles.append({k: e[k] for k in ['ti', 'ab']})
+        meta.append({k: e[k] for k in ['date', 'doi', 'url', 'year', 'authors', 'source']})
+
     return {"articles": articles, "meta": meta}
 
 
@@ -78,9 +86,9 @@ def upload_to_postgres(annotations, meta):
         cur.execute("""INSERT INTO medrxiv_covid19 (doi, url, year, date, 
         ti, ab, is_human, is_rct_precise, is_rct_balanced, is_rct_sensitive,
         rct_probability, population, interventions, outcomes, population_mesh,
-        interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias,
-        low_ac_bias, low_bpp_bias, punchline_text, effect, authors, source) VALUES (%s, 
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 
+        interventions_mesh, outcomes_mesh, num_randomized, prob_low_rob,
+        punchline_text, effect, authors, source) VALUES (%s, 
+        %s, %s, %s, %s, %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s, 
         %s, %s, %s, %s, %s, %s, %s, %s);
         """, (m['doi'], m['url'], m['year'], m['date'], a['ti'], a['ab'],
              a['human_bot']['is_human'], a['rct_bot']['is_rct_precise'], 
@@ -93,9 +101,7 @@ def upload_to_postgres(annotations, meta):
              json.dumps(a['pico_span_bot']['interventions_mesh']),
              json.dumps(a['pico_span_bot']['outcomes_mesh']),
              sample_size,
-             a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
-             a['bias_ab_bot']['allocation_concealment']['judgement']=='low',
-             a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
+             a['bias_ab_bot']['prob_low_rob'],
              a['punchline_bot']['punchline_text'],
              a['punchline_bot']['effect'],
             json.dumps(m['authors']),
