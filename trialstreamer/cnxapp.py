@@ -44,7 +44,7 @@ log.info("done!")
 #     drugs_from_class = pickle.load(f)
 #  RxNorm should solve this one in subtrees (to test more)
 log.info("Metathesaurus trees")
-with open(os.path.join(trialstreamer.DATA_ROOT, 'minimap/cui_subtrees.pck'), 'rb') as f:
+with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
 log.info("done!")
 
@@ -111,11 +111,11 @@ def meta():
            port=trialstreamer.config.POSTGRES_PORT) as db:
         cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # get last PubMed updated date
-        cur.execute("select source_date from update_log where update_type='pubmed_update' order by source_date desc limit 1;")
-        last_updated = cur.fetchone()['source_date']
+        cur.execute("select download_date from update_log where update_type='fullcheck' order by source_date desc limit 1;")
+        last_updated = cur.fetchone()['download_date']
 
-        cur.execute("select count_rct_precise from pubmed_rct_count;")
-        num_rcts = cur.fetchone()['count_rct_precise']
+        cur.execute("select count_rct_balanced from pubmed_rct_count;")
+        num_rcts = cur.fetchone()['count_rct_balanced']
 
     return {"last_updated": last_updated, "num_rcts": f"{num_rcts:,}"}
 
@@ -127,14 +127,14 @@ def covid19():
     ts_sql = """
     SELECT pm.pmid, pm.ti, pm.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes,
     pa.population_mesh, pa.interventions_mesh, pa.outcomes_mesh, pa.num_randomized, pa.low_rsg_bias, pa.low_ac_bias,
-    pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE pm.is_rct_precise=true and
+    pa.low_bpp_bias, pa.punchline_text FROM pubmed as pm, pubmed_annotations as pa WHERE pm.is_rct_balanced=true and
     pa.population_mesh@>'[{"mesh_ui": "C000657245"}]' and pm.pmid=pa.pmid;
     """
 
     medrxiv_sql = """
     SELECT ti, ab, year, punchline_text, population, interventions, outcomes,
     population_mesh, interventions_mesh, outcomes_mesh, num_randomized, low_rsg_bias, low_ac_bias,
-    low_bpp_bias, punchline_text FROM medrxiv_covid19 WHERE is_rct_precise=true;
+    low_bpp_bias, punchline_text FROM medrxiv_covid19 WHERE is_rct_balanced=true;
     """
 
     out = []
@@ -206,7 +206,7 @@ def picosearch(body):
     elif retmode=='ris':
         select = sql.SQL("SELECT pm.pmid as pmid, pm.year as year, pm.ti as ti, pm.ab as ab, pm.pm_data->>'journal' as journal FROM pubmed as pm, pubmed_annotations as pa WHERE ")
 
-    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_precise=true and pm.is_human=true")
+    join = sql.SQL("AND pm.pmid = pa.pmid AND pm.is_rct_balanced=true and pm.is_human=true")
 
     if ordering == 'score':
         join += sql.SQL(" order by score desc nulls last limit 250;")
@@ -285,7 +285,7 @@ def picosearch(body):
             cov_select = sql.SQL("SELECT pa.ti, pa.ab, pa.year, pa.punchline_text, pa.population, pa.interventions, pa.outcomes, pa.num_randomized, pa.prob_low_rob, pa.punchline_text, pa.authors, pa.source, pa.doi FROM medrxiv_covid19 as pa WHERE ")
         elif retmode=='ris':
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
-        cov_join = sql.SQL(" AND pa.is_rct_precise=true AND pa.is_human=true LIMIT 250;")
+        cov_join = sql.SQL(" AND pa.is_rct_balanced=true AND pa.is_human=true LIMIT 250;")
 
 
 

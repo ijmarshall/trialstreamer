@@ -185,7 +185,7 @@ create materialized view if not exists pubmed_year_counts AS
         round(count(*) * avg(rct_probability)) as est_rct_count
 from pubmed where year >= 1948 group by year;
 
-create materialized view if not exists pubmed_rct_count as select count(*) as count_rct_precise from pubmed where is_rct_precise=true;
+create materialized view if not exists pubmed_rct_count as select count(*) as count_rct_balanced from pubmed where is_rct_balanced=true;
 
 
 create table if not exists medrxiv_covid19 (
