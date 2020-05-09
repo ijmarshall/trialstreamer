@@ -585,7 +585,7 @@ def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=10
                 if sample_size == 'not found' or int(sample_size) > 1000000:
                     sample_size = None
 
-                cur.execute("INSERT INTO pubmed_annotations (pmid, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, population_berts, interventions_berts, outcomes_berts, num_randomized, low_rsg_bias, low_ac_bias, low_bpp_bias, punchline_text, effect) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                cur.execute("INSERT INTO pubmed_annotations (pmid, population, interventions, outcomes, population_mesh, interventions_mesh, outcomes_mesh, population_berts, interventions_berts, outcomes_berts, num_randomized, prob_low_rob, punchline_text, effect) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                     (a['pmid'],
                      json.dumps(a['pico_span_bot']['population']),
                      json.dumps(a['pico_span_bot']['interventions']),
@@ -597,9 +597,7 @@ def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=10
                      a['pico_span_bot']['interventions_berts'],
                      a['pico_span_bot']['outcomes_berts'],
                      sample_size,
-                     a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
-                     a['bias_ab_bot']['allocation_concealment']['judgement']=='low',
-                     a['bias_ab_bot']['random_sequence_generation']['judgement']=='low',
+                     a['bias_ab_bot']['prob_low_rob'],
                      a['punchline_bot']['punchline_text'],
                      a['punchline_bot']['effect']
                      ))
