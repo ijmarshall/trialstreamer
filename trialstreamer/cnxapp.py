@@ -111,7 +111,7 @@ def meta():
            port=trialstreamer.config.POSTGRES_PORT) as db:
         cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # get last PubMed updated date
-        cur.execute("select download_date from update_log where update_type='fullcheck' order by source_date desc limit 1;")
+        cur.execute("select download_date from update_log where update_type='fullcheck' order by download_date desc limit 1;")
         last_updated = cur.fetchone()['download_date']
 
         cur.execute("select count_rct_balanced from pubmed_rct_count;")
