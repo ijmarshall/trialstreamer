@@ -1,4 +1,5 @@
 import urllib
+import requests 
 
 import logging
 logging.basicConfig(level="INFO", format='[%(levelname)s] %(name)s %(asctime)s: %(message)s')
@@ -49,6 +50,10 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
 log.info("done!")
 
 
+### !!EXPERIMENTAL!! ###
+# assumes RoboSum Flask service is running locally (on port 5000)
+robo_sum_end_point = "http://127.0.0.1:5000/summarize"
+robo_sum_headers   = {'Content-Type': 'application/json', 'Accept':'application/json'}
 
 def get_subtree(cui, levels=1):
     try:
@@ -110,12 +115,13 @@ def meta():
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
         cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
         # get last PubMed updated date
         cur.execute("select download_date from update_log where update_type='fullcheck' order by download_date desc limit 1;")
         last_updated = cur.fetchone()['download_date']
-
         cur.execute("select count_rct_balanced from pubmed_rct_count;")
         num_rcts = cur.fetchone()['count_rct_balanced']
+    
 
     return {"last_updated": last_updated, "num_rcts": f"{num_rcts:,}"}
 
@@ -159,6 +165,17 @@ def get_cite(authors, journal, year):
 def get_medrxiv_cite(authors, source, year):
     return f"{authors[0]['author_name']}{' et al.' if len(authors) > 1 else ''}, {source}. {year}"
 
+
+def extract_summarization_inputs(search_result, max_studies=10, punchlines=True) -> list:
+    # expected format is a list of dictionaries comprising "ti" and "abs"
+    # fields for each study; note that the latter can be the punchlines (only),
+    # and this is especially appropriate if the model was trained this way!
+    abs_key = "punchline_text" if punchlines else "abs"
+    
+    sum_inputs = []
+    for study in search_result[:max_studies]:
+        sum_inputs.append({"ti": study["ti"], "abs": study[abs_key]})
+    return sum_inputs
 
 def picosearch(body):
     """
@@ -248,6 +265,25 @@ def picosearch(body):
                                             ("AB", row['ab'])]))
 
 
+    ### !! EXPERIMENTAL EXPERIMENTAL !! ###
+    # Summarization!
+    
+    sum_inputs = extract_summarization_inputs(out)
+    # post to RoboSum
+    response = requests.post(robo_sum_end_point, 
+                  json=json.dumps({"articles":sum_inputs}), 
+                  headers=robo_sum_headers)
+
+    def clean_up(s):
+        # sorry this is terrible and ad-hoc! didn't feel
+        # like trotting out regex...
+        return s.replace(" .", ".").strip().strip('""').strip()
+    summary = clean_up(response.text)
+    # I add summary as first element in the returned result.
+    out.insert(0, summary)
+    
+    
+
     ### ICTRP
     log.info('building ICTRP SQL')
     if retmode=='json-short':
@@ -314,6 +350,7 @@ def picosearch(body):
 
 
     log.info('returning results')
+    
     if retmode=='json-short':
         return out
     elif retmode=='ris':
