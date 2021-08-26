@@ -6,6 +6,7 @@ log = logging.getLogger(__name__)
 
 log.info("Welcome to the Trialstreamer Server!")
 
+import connexion
 import trialstreamer
 from trialstreamer import ris
 from collections import OrderedDict
@@ -47,7 +48,6 @@ log.info("Metathesaurus trees")
 with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
     subtrees = pickle.load(f)
 log.info("done!")
-
 
 
 def get_subtree(cui, levels=1):
@@ -171,7 +171,7 @@ def picosearch(body):
     ordering = body.get('order', 'score')
     assert ordering in set(['year', 'score']), "Ordering not one of pdate or score"
 
-    log.info('expanding query')
+    log.debug('expanding query')
     expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
@@ -181,7 +181,7 @@ def picosearch(body):
 
     builder = []
 
-    log.info('building SQL')
+    log.debug('building SQL')
     for c in query:
 
         if expand_terms:
@@ -215,17 +215,17 @@ def picosearch(body):
 
     out = []
 
-    log.info('connecting to DB')
+    log.debug('connecting to DB')
     # PUBMED
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
-        log.info('creating cursor')
+        log.debug('creating cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_cui") as cur:
-            log.info('running query server side')
+            log.debug('running query server side')
             cur.execute(select + params + join)
-            log.info((select + params + join).as_string(cur))
-            log.info('parsing results')
+            log.debug((select + params + join).as_string(cur))
+            log.debug('parsing results')
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
@@ -249,23 +249,23 @@ def picosearch(body):
 
 
     ### ICTRP
-    log.info('building ICTRP SQL')
+    log.debug('building ICTRP SQL')
     if retmode=='json-short':
         ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
     elif retmode=='ris':
         ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
     ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")
 
-    log.info('connecting to database (ICTRP)')
+    log.debug('connecting to database (ICTRP)')
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
-        log.info('creating ICTRP cursor')
+        log.debug('creating ICTRP cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
-            log.info('running ICTRP query')
+            log.debug('running ICTRP query')
             cur.execute(ictrp_select + params + ictrp_join)
-            log.info('parsing ICTRP results')
-            print((ictrp_select + params + ictrp_join).as_string(cur))
+            log.debug('parsing ICTRP results')
+            log.debug((ictrp_select + params + ictrp_join).as_string(cur))
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out_d = dict(row)
@@ -294,7 +294,7 @@ def picosearch(body):
            port=trialstreamer.config.POSTGRES_PORT) as db:
             with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
                 cur.execute(cov_select + params + cov_join)
-                print((cov_select + cov_join).as_string(cur))
+                log.debug((cov_select + cov_join).as_string(cur))
                 for i, row in enumerate(cur):
                     if retmode=='json-short':
                         out.append({"ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
@@ -404,8 +404,12 @@ def get_trial(uuid):
     return out
 
 
+def create_app():
+    app = connexion.FlaskApp(__name__, specification_dir='api/', port=trialstreamer.config.TS_PORT, server='gevent')
+    app.add_api('trialstreamer_api.yml')
+    CORS(app.app)
+    log.info(f'Trialstreamer API Ready! Listening on 0.0.0.0:{trialstreamer.config.TS_PORT}')
+    return app
 
-import connexion
-app = connexion.FlaskApp(__name__, specification_dir='api/', port=trialstreamer.config.TS_PORT, server='gevent')
-app.add_api('trialstreamer_api.yml')
-CORS(app.app)
+
+app = create_app()

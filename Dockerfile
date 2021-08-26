@@ -30,15 +30,16 @@ ENV PATH /var/lib/deploy/miniconda3/envs/trialstreamer/bin:$PATH
 
 USER root
 ADD server.py /var/lib/deploy/
-ADD run /var/lib/deploy/
+ADD entrypoint.sh /var/lib/deploy/
 ADD trialstreamer /var/lib/deploy/trialstreamer
 RUN chown -R deploy.deploy /var/lib/deploy/trialstreamer
 
 
-EXPOSE 5000
 ENV HOME /var/lib/deploy
 
 USER root
 
-ENTRYPOINT ["/var/lib/deploy/run"]
+RUN pip install gunicorn gevent
+
+ENTRYPOINT ["/var/lib/deploy/entrypoint.sh"]
 

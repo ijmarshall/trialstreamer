@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+
+  trialstreamer-api:
+    image: docker.unholster.com/trialstreamer-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./trialstreamer:/var/lib/deploy/trialstreamer
+    restart: unless-stopped
+    command: api-dev
+    ports:
+      - 5000:5000

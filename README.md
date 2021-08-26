@@ -17,3 +17,16 @@ pubmed.download_ftp_baseline()
 7. run `python -m trialstreamer` to start the server on localhost:5000
 
  
+## Running with Docker
+Create a `.env` file from the `.envTemplate` file provided. Then, fill in the environment variables.
+NOTE: If a variable with the prefix `TRIALSTREAMER_` was also defined in the `config.json` file, the environment variable will overwrite it.
+
+```
+docker-compose up --build --remove-orphans
+```
+
+## Running with Docker in development mode
+```
+docker-compose -f docker-compose.dev.yml up --build --remove-orphans
+```
+This mode allows reloading the app when changes are detected.
