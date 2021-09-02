@@ -57,5 +57,7 @@ dependencies:
     - swagger-ui-bundle==0.0.6
     - urllib3==1.25.8
     - zipp==2.0.0
+    - python-dateutil==2.8.2
+    - tqdm==4.62.2
 prefix: /home/iain/anaconda3/envs/trialstreamer
 

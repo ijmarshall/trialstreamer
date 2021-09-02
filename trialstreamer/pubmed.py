@@ -4,7 +4,7 @@
 
 
 from trialstreamer import dbutil, config
-from robotdata.readers import pmreader
+from trialstreamer.readers import pmreader
 import trialstreamer
 import logging
 import os
@@ -32,17 +32,10 @@ import time
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
 
-
-
-
-
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 homepage = "ftp.ncbi.nlm.nih.gov"
-
-
-
-
 
 
 def get_ftp():
@@ -55,11 +48,13 @@ def get_ftp():
 
     return ftp
 
+
 def get_baseline_fns():
     ftp = get_ftp()
     filelist = ftp.nlst('pubmed/baseline/')
     baseline_fns = [f for f in filelist if f.endswith('.gz')]
     return baseline_fns
+
 
 def get_daily_update_fns():
     ftp = get_ftp()
@@ -68,12 +63,14 @@ def get_daily_update_fns():
     update_fns.sort() # since we want to process these in order
     return update_fns
 
+
 def get_daily_update_mod_times(update_fns):
     ftp = get_ftp()
     out = {}
     for fn in update_fns:
         out[os.path.basename(fn)] = parser.parse(ftp.sendcmd('MDTM {}'.format(fn))[4:].strip())
     return out
+
 
 def get_daily_update_fn_and_times():
     ftp = get_ftp()
@@ -86,6 +83,7 @@ def get_daily_update_fn_and_times():
             modtimes[r[0]] = parser.parse(r[1]['modify'])
     return update_fns, modtimes
 
+
 def already_done_md5s(updates=False):
     """
     glob which md5s already downloaded
@@ -97,6 +95,7 @@ def already_done_md5s(updates=False):
     fns = glob.glob(pth)
     return set([os.path.basename(r) for r in fns])
 
+
 def already_done_gzs(updates=False):
     """
     glob which gzipped data files already downloaded
@@ -106,14 +105,16 @@ def already_done_gzs(updates=False):
     else:
         pth = os.path.join(config.PUBMED_LOCAL_DATA_PATH, '*.gz')
 
-    fns =  glob.glob(pth)
+    fns = glob.glob(pth)
     return set([os.path.basename(r) for r in fns])
+
 
 def already_done_updates():
     cur = dbutil.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute("SELECT source_filename FROM update_log WHERE update_type='pubmed_update';")
     already_done_files = set((r['source_filename'] for r in cur.fetchall()))
     return already_done_files
+
 
 def download_ftp_updates():
     """
@@ -156,14 +157,11 @@ def download_ftp_updates():
     log.info("All done successfully!")
 
 
-
-
 def update_counts():
     cur = dbutil.db.cursor()
     cur.execute("refresh materialized view pubmed_rct_count;")
     cur.close()
     dbutil.db.commit()
-
 
 
 def download_ftp_baseline(force_update=False):
@@ -222,6 +220,7 @@ def download_md5s(gz_fns, updates=False):
         with open(out_filename + ".md5", 'wb') as f:
             ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
 
+
 def download_and_validate_gzs(gz_fns, updates=False):
     """
     download datafiles, and validate
@@ -272,7 +271,7 @@ def validate_file(fn, hash_fn, raise_for_errors=True):
     if obs_md5 != true_md5 and raise_for_errors:
         raise Exception("File {} doesn't match md5... possibly corrupted, suggest delete and redownload".format(fn))
     else:
-        return (obs_md5 == true_md5)
+        return obs_md5 == true_md5
 
 
 def iter_abstracts(fn, updates=False, skip_list=None):
@@ -360,11 +359,13 @@ def classify(entry_batch):
         out.append(row)
     return out
 
+
 def grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks - from itertools recipes adapted a bit"
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return ([i for i in r if i is not None] for r in zip_longest(*args, fillvalue=fillvalue))
+
 
 def get_date_from_fn(ftp_fn):
     """
@@ -372,8 +373,6 @@ def get_date_from_fn(ftp_fn):
     """
     bn = os.path.basename(ftp_fn)
     return datetime.datetime(int("20" + bn[6:8])-1, 12, 31)
-
-
 
 
 def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update=False, updates=False, modtimes=None):
@@ -523,13 +522,10 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
     dbutil.db.commit()
 
 
-
-
 # def meshify_pico():
 #     """
 #     update an un-meshed table with mesh picos
 #     """
-
 
 
 def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=100):
@@ -606,9 +602,6 @@ def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=10
 
     update_type = "picospan_full" if force_refresh else "picospan_partial"
     dbutil.log_update(update_type=update_type, source_date=datetime.datetime.now())
-
-
-
 
 
 def update():
