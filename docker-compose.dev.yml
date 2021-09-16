@@ -11,7 +11,15 @@ services:
       - .env
     volumes:
       - ./trialstreamer:/var/lib/deploy/trialstreamer
+      - ./pubmed-data:/var/lib/deploy/pubmed-data
+    configs:
+      - source: ts-config
+        target: /var/lib/deploy/config.json
     restart: unless-stopped
     command: api-dev
     ports:
-      - 5000:5000
+      - 5000:$TRIALSTREAMER_TS_PORT
+
+configs:
+  ts-config:
+    file: ./trialstreamer/config.json

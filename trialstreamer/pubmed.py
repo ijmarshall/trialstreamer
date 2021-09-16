@@ -36,6 +36,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 homepage = "ftp.ncbi.nlm.nih.gov"
+max_retry_attempts = config.DOWNLOAD_RETRY_ATTEMPTS or 1
 
 
 def get_ftp():
@@ -137,7 +138,7 @@ def download_ftp_updates():
     log.info("Checking hashfiles, and downloading any missing")
 
     already_done_fns = already_done_gzs(updates=True)
-
+    log.info(f"{len(already_done_fns)} already done gz files")
     log.info("Verifying local gzipped data files")
     validate_downloaded_data(already_done_fns, updates=True)
     log.info("Data validated")
@@ -147,6 +148,8 @@ def download_ftp_updates():
     download_md5s(update_ftp_fns, updates=True)
     download_and_validate_gzs(update_ftp_fns, updates=True)
     log.info("Uploading to postgres")
+    already_done_fns = already_done_gzs(updates=True)
+    log.info(f"{len(already_done_fns)} valid gz files")
 
     safety_test_parse = config.SAFETY_TEST_PARSE
     upload_to_postgres(update_ftp_fns, safety_test_parse=safety_test_parse, batch_size=5000, updates=True, modtimes=update_ftp_mod_times)
@@ -217,8 +220,19 @@ def download_md5s(gz_fns, updates=False):
             out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, 'updates', os.path.basename(gz_fn))
         else:
             out_filename = os.path.join(config.PUBMED_LOCAL_DATA_PATH, os.path.basename(gz_fn))
-        with open(out_filename + ".md5", 'wb') as f:
-            ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
+        attempt = 0
+        while attempt <= max_retry_attempts:
+            try:
+                log.info(f'Downloading {out_filename+".md5"}... ')                                
+                with open(out_filename + ".md5", 'wb') as f:
+                    ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
+                break
+            except Exception:
+                attempt += 1
+                log.info(f'Failed, retrying download ({attempt})...')
+                # Delete corrupted file
+                if os.path.exists(out_filename + ".md5"):
+                    os.remove(out_filename + ".md5")                
 
 
 def download_and_validate_gzs(gz_fns, updates=False):
@@ -240,15 +254,26 @@ def download_and_validate_gzs(gz_fns, updates=False):
 
         ftp = get_ftp()
 
-        with open(out_filename, 'wb') as f:
-            ftp.retrbinary('RETR ' + gz_fn, f.write)
+        attempt = 0
+        while attempt <= max_retry_attempts:
+            try:
+                log.info(f'Downloading {out_filename}...')
+                with open(out_filename, 'wb') as f:
+                    ftp.retrbinary('RETR ' + gz_fn, f.write)
+                with open(out_filename + ".md5", 'wb') as f:
+                    ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
+                log.info(f'Validating downloaded file {out_filename}')
+                validate_file(out_filename, out_filename + ".md5", raise_for_errors=True)
+                break
 
-        with open(out_filename + ".md5", 'wb') as f:
-            ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
-
-
-
-        validate_file(out_filename, out_filename + ".md5", raise_for_errors=True)
+            except Exception:
+                attempt += 1
+                log.info(f'Failed, retrying download ({attempt})...')
+                # Delete corrupted files
+                if os.path.exists(out_filename):
+                    os.remove(out_filename)
+                if os.path.exists(out_filename + ".md5"):
+                    os.remove(out_filename + ".md5")
 
 
 def validate_downloaded_data(fns, updates=False):
@@ -303,16 +328,20 @@ def predict(X, tasks=None, filter_rcts="is_rct_sensitive"):
         "filter_rcts": filter_rcts
     }
     r = requests.post(base_url+'queue-documents', json=upload_data, headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY})
-    report_id = r.json()
+    response = r.json()
+    if 'report_id' not in response:
+        raise Exception(f'Invalid response for RobotReviewer API request: {response}')
+    report_id = response['report_id']
+    log.info(f'Queued documents with report ID: {report_id}')
 
     def check_report(report_id):
-        r = requests.get(base_url +'report-status/'+report_id['report_id'], headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY})
+        r = requests.get(base_url +'report-status/'+report_id, headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY})
         return r.json()['state'] == 'SUCCESS'
 
     while not check_report(report_id):
         time.sleep(0.3)
 
-    report = requests.get(base_url +'report/'+report_id['report_id'], headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY}).json()
+    report = requests.get(base_url +'report/'+report_id, headers={"api-key": trialstreamer.config.ROBOTREVIEWER_API_KEY}).json()
     return report
 
 

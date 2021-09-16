@@ -15,11 +15,18 @@ api-dev)
     export LANG=C.UTF-8
     export FLASK_APP=server:flask_app
     export FLASK_ENV=development
-    cd /var/lib/deploy/ && flask run --host 0.0.0.0 --port 5000 --eager-loading
+    flask run --host 0.0.0.0 --port $TRIALSTREAMER_TS_PORT --eager-loading
     ;;
 api)
     echo "[entrypoint.sh] Starting Trialstreamer API"
-    cd /var/lib/deploy/ && gunicorn --worker-class gevent --workers $GUNICORN_WORKERS --timeout $GUNICORN_WORKER_TIMEOUT -b 0.0.0.0:5000 server:app
+    gunicorn --worker-class gevent --workers $GUNICORN_WORKERS --timeout $GUNICORN_WORKER_TIMEOUT -b 0.0.0.0:$TRIALSTREAMER_TS_PORT server:app
+    ;;
+cron)
+    echo "[entrypoint.sh] Starting Trialstreamer Updates Crontab"
+    export > /var/lib/deploy/cron.env
+    chmod 0644 /etc/cron.d/crontab
+    crontab /etc/cron.d/crontab
+    cron -f
     ;;
 *)
     if [ ! -z "$(which $1)" ]

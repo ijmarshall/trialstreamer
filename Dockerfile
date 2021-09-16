@@ -9,7 +9,7 @@ RUN useradd --create-home --home /var/lib/deploy deploy
 # install apt-get requirements
 ADD apt-requirements.txt /tmp/apt-requirements.txt
 RUN apt-get -qq update -y
-RUN xargs -a /tmp/apt-requirements.txt apt-get install -y --no-install-recommends && apt-get clean
+RUN xargs -a /tmp/apt-requirements.txt apt-get install -y --no-install-recommends && apt-get clean && rm -rf /etc/cron.*/*
 
 # Certs
 RUN mkdir -p /etc/pki/tls/certs && \
@@ -31,15 +31,18 @@ ENV PATH /var/lib/deploy/miniconda3/envs/trialstreamer/bin:$PATH
 USER root
 ADD server.py /var/lib/deploy/
 ADD entrypoint.sh /var/lib/deploy/
+ADD update.py /var/lib/deploy/
+ADD crontab /etc/cron.d/crontab
 ADD trialstreamer /var/lib/deploy/trialstreamer
+RUN mkdir -p /var/lib/deploy/pubmed-data
 RUN chown -R deploy.deploy /var/lib/deploy/trialstreamer
 
-
 ENV HOME /var/lib/deploy
+
+WORKDIR /var/lib/deploy
 
 USER root
 
 RUN pip install gunicorn gevent
 
 ENTRYPOINT ["/var/lib/deploy/entrypoint.sh"]
-

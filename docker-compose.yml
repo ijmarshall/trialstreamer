@@ -10,6 +10,28 @@ services:
     env_file:
       - .env
     command: api
+    volumes:
+      - ./trialstreamer/pubmed-data:/var/lib/deploy/pubmed-data
+    configs:
+      - source: ts-config
+        target: /var/lib/deploy/config.json
     restart: unless-stopped
     ports:
-      - 5000:5000
+      - 5000:$TRIALSTREAMER_TS_PORT
+
+  trialstreamer-updates:
+    image: docker.unholster.com/trialstreamer-updates
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: cron
+    volumes:
+      - ./pubmed-data:/var/lib/deploy/pubmed-data
+    restart: unless-stopped
+
+configs:
+  ts-config:
+    file: ./trialstreamer/config.json
+ 

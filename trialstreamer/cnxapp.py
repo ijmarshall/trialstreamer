@@ -61,6 +61,7 @@ def get_subtree(cui, levels=1):
     decs.add(cui)
     return decs
 
+
 def auth(api_key, required_scopes):
     print(trialstreamer.config.API_KEYS)
     print(api_key)
@@ -68,6 +69,7 @@ def auth(api_key, required_scopes):
     if not info:
         raise OAuthProblem('Invalid token')
     return info
+
 
 def autocomplete(q):
     """
@@ -100,6 +102,7 @@ def autocomplete(q):
     else:
         # where we have enough chars, process and get top ranked
         return sorted(dedupe(flat_list(matches)), key=lambda x: x['count'], reverse=True)[:max_return]
+
 
 def meta():
     """
@@ -150,11 +153,13 @@ def covid19():
         out['trialstreamer_preprint'] = [dict(r) for r in cur.fetchall()]
     return out
 
+
 def get_cite(authors, journal, year):
     if len(authors) >= 1:
         return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
     else:
         return f"{journal}. {year}"
+
 
 def get_medrxiv_cite(authors, source, year):
     return f"{authors[0]['author_name']}{' et al.' if len(authors) > 1 else ''}, {source}. {year}"
@@ -216,6 +221,7 @@ def picosearch(body):
     out = []
 
     log.debug('connecting to DB')
+
     # PUBMED
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
@@ -247,7 +253,6 @@ def picosearch(body):
                                             ("JO", row['journal']),
                                             ("AB", row['ab'])]))
 
-
     ### ICTRP
     log.debug('building ICTRP SQL')
     if retmode=='json-short':
@@ -275,9 +280,6 @@ def picosearch(body):
                     # TODO MAKE RIS REASONABLE FOR ICTRP
                     pass
 
-
-
-
     ### START COVID-19 PREPRINTS
     if any(((q_i['cui']=="TS-COV19") and (q_i['field']=="population") for q_i in query)):
 
@@ -286,8 +288,6 @@ def picosearch(body):
         elif retmode=='ris':
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_balanced=true AND pa.is_human=true LIMIT 250;")
-
-
 
         with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
@@ -310,8 +310,6 @@ def picosearch(body):
                     elif retmode=='ris':
                         pass
                         # TODO MAKE RIS REASONABLE FOR ICTRP
-
-
 
     log.info('returning results')
     if retmode=='json-short':
