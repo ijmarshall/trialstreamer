@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 with open(os.path.join(trialstreamer.DATA_ROOT, 'rct_model_calibration.json'), 'r') as f:
     clf_cutoffs = json.load(f)
 
+
 def get_articles():
     url = "https://connect.medrxiv.org/relate/collection_json.php?grp=181"
     feed = requests.get(url)
@@ -32,7 +33,7 @@ def get_articles():
                     "authors": a['rel_authors'], "source": a["rel_site"]})
 
     # add any key manually added papers for now from the local json
-    with open(os.path.join(trialstreamer.DATA_ROOT, 'manual_preprints.json'), 'r') as f:
+    with open(os.path.join(trialstreamer.DATA_ROOT, 'manual_preprints.json'), 'r', encoding='utf-8') as f:
         extras = json.load(f)
 
     for e in extras:

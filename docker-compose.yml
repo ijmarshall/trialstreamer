@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
 
-  trialstreamer-api:
+  api:
     image: docker.unholster.com/trialstreamer-api
     build:
       context: .
@@ -19,7 +19,7 @@ services:
     ports:
       - 5000:$TRIALSTREAMER_TS_PORT
 
-  trialstreamer-updates:
+  updates:
     image: docker.unholster.com/trialstreamer-updates
     build:
       context: .
