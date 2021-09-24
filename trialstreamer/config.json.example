@@ -9,7 +9,6 @@
         "download_retry_attempts": 3,
         "mendeley_id": "",
         "mendeley_secret": "",
-        "robotreviewer_url": "http://localhost:5051/",
         "api_keys": {
             "this is an api key":{
                 "uid": 1

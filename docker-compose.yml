@@ -11,13 +11,13 @@ services:
       - .env
     command: api
     volumes:
-      - ./trialstreamer/pubmed-data:/var/lib/deploy/pubmed-data
+      - ./pubmed-data:/var/lib/deploy/pubmed-data
     configs:
       - source: ts-config
         target: /var/lib/deploy/config.json
     restart: unless-stopped
     ports:
-      - 5000:$TRIALSTREAMER_TS_PORT
+      - 5000:5000
 
   updates:
     image: docker.unholster.com/trialstreamer-updates
