@@ -3,7 +3,7 @@ version: "3.9"
 services:
 
   trialstreamer-api:
-    image: docker.unholster.com/trialstreamer-api
+    image: trialstreamer-api
     build:
       context: .
       dockerfile: Dockerfile
