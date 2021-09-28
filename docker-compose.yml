@@ -30,8 +30,14 @@ services:
     volumes:
       - ./pubmed-data:/var/lib/deploy/pubmed-data
     restart: unless-stopped
+    networks:
+      - robotreviewer_network
 
 configs:
   ts-config:
     file: ./trialstreamer/config.json
- 
+
+networks:
+  robotreviewer_network:
+     external: true
+     name: robotreviewer_default

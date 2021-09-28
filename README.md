@@ -27,21 +27,26 @@ NOTE: If a variable with the prefix `TRIALSTREAMER_` was also defined in the `co
 Make sure the `pubmed_local_data_path` configured at `config.json` exists and is the same as the one used as the volumes
 specified in docker compose files. It is recommended that this path is not located under `trialstreamer` folder.
 
-To start the Trialstreamer API and Updates Crontab services, run the following commands:
+To start the Trialstreamer API and Updates Crontab services, run the following commands after RobotReviewer is already running:
+
 ```
 docker-compose build
-docker-compose up --remove-orphans
+docker-compose up -d 
 ```
-
 or, as a single command:
 ```
-docker-compose up --build --remove-orphans
+docker-compose up --build -d 
+```
+
+If RobotReviewer is not running with docker-compose, you will have to create the network `robotreviewer_default` with:
+```
+docker network create robotreviewer_default 
 ```
 
 ## Running with Docker in development mode
 
 ```
-docker-compose -f docker-compose.dev.yml up --build --remove-orphans
+docker-compose -f docker-compose.dev.yml up --build -d
 ```
 
 The development mode allows reloading the app when changes are detected, but the update script is not run automatically. 
