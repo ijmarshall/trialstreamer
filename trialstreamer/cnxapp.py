@@ -6,6 +6,7 @@ log = logging.getLogger(__name__)
 
 log.info("Welcome to the Trialstreamer Server!")
 
+import connexion
 import trialstreamer
 from trialstreamer import ris
 from collections import OrderedDict
@@ -49,7 +50,6 @@ with open(os.path.join(trialstreamer.DATA_ROOT, 'cui_subtrees.pck'), 'rb') as f:
 log.info("done!")
 
 
-
 def get_subtree(cui, levels=1):
     try:
         decs = set(subtrees.successors(cui))
@@ -61,6 +61,7 @@ def get_subtree(cui, levels=1):
     decs.add(cui)
     return decs
 
+
 def auth(api_key, required_scopes):
     print(trialstreamer.config.API_KEYS)
     print(api_key)
@@ -68,6 +69,7 @@ def auth(api_key, required_scopes):
     if not info:
         raise OAuthProblem('Invalid token')
     return info
+
 
 def autocomplete(q):
     """
@@ -100,6 +102,7 @@ def autocomplete(q):
     else:
         # where we have enough chars, process and get top ranked
         return sorted(dedupe(flat_list(matches)), key=lambda x: x['count'], reverse=True)[:max_return]
+
 
 def meta():
     """
@@ -150,11 +153,13 @@ def covid19():
         out['trialstreamer_preprint'] = [dict(r) for r in cur.fetchall()]
     return out
 
+
 def get_cite(authors, journal, year):
     if len(authors) >= 1:
         return f"{authors[0]['LastName']}{' et al.' if len(authors) > 1 else ''}, {journal}. {year}"
     else:
         return f"{journal}. {year}"
+
 
 def get_medrxiv_cite(authors, source, year):
     return f"{authors[0]['author_name']}{' et al.' if len(authors) > 1 else ''}, {source}. {year}"
@@ -171,7 +176,7 @@ def picosearch(body):
     ordering = body.get('order', 'score')
     assert ordering in set(['year', 'score']), "Ordering not one of pdate or score"
 
-    log.info('expanding query')
+    log.debug('expanding query')
     expand_terms = body.get("expand_terms", True)
 
     if len(query)==0:
@@ -181,7 +186,7 @@ def picosearch(body):
 
     builder = []
 
-    log.info('building SQL')
+    log.debug('building SQL')
     for c in query:
 
         if expand_terms:
@@ -215,17 +220,18 @@ def picosearch(body):
 
     out = []
 
-    log.info('connecting to DB')
+    log.debug('connecting to DB')
+
     # PUBMED
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
-        log.info('creating cursor')
+        log.debug('creating cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_cui") as cur:
-            log.info('running query server side')
+            log.debug('running query server side')
             cur.execute(select + params + join)
-            log.info((select + params + join).as_string(cur))
-            log.info('parsing results')
+            log.debug((select + params + join).as_string(cur))
+            log.debug('parsing results')
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out.append({"pmid": row['pmid'], "ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
@@ -247,25 +253,24 @@ def picosearch(body):
                                             ("JO", row['journal']),
                                             ("AB", row['ab'])]))
 
-
     ### ICTRP
-    log.info('building ICTRP SQL')
+    log.debug('building ICTRP SQL')
     if retmode=='json-short':
         ictrp_select = sql.SQL("SELECT pa.regid, pa.ti, pa.year, pa.population, pa.interventions, pa.outcomes, pa.target_size, pa.is_rct, pa.is_recruiting, pa.countries, pa.date_registered FROM ictrp as pa WHERE ")
     elif retmode=='ris':
         ictrp_select = sql.SQL("SELECT pa.regid as id, pa.year as year, pa.ti as ti FROM ictrp as pa WHERE ")
     ictrp_join = sql.SQL("AND pa.is_rct='RCT' LIMIT 250;")
 
-    log.info('connecting to database (ICTRP)')
+    log.debug('connecting to database (ICTRP)')
     with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
-        log.info('creating ICTRP cursor')
+        log.debug('creating ICTRP cursor')
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
-            log.info('running ICTRP query')
+            log.debug('running ICTRP query')
             cur.execute(ictrp_select + params + ictrp_join)
-            log.info('parsing ICTRP results')
-            print((ictrp_select + params + ictrp_join).as_string(cur))
+            log.debug('parsing ICTRP results')
+            log.debug((ictrp_select + params + ictrp_join).as_string(cur))
             for i, row in enumerate(cur):
                 if retmode=='json-short':
                     out_d = dict(row)
@@ -274,9 +279,6 @@ def picosearch(body):
                 elif retmode=='ris':
                     # TODO MAKE RIS REASONABLE FOR ICTRP
                     pass
-
-
-
 
     ### START COVID-19 PREPRINTS
     if any(((q_i['cui']=="TS-COV19") and (q_i['field']=="population") for q_i in query)):
@@ -287,14 +289,12 @@ def picosearch(body):
             cov_select = sql.SQL("SELECT pa.year as year, pa.ti as ti, pa.ab as ab FROM medrxiv_covid19 as pa WHERE ")
         cov_join = sql.SQL(" AND pa.is_rct_balanced=true AND pa.is_human=true LIMIT 250;")
 
-
-
         with psycopg2.connect(dbname=trialstreamer.config.POSTGRES_DB, user=trialstreamer.config.POSTGRES_USER,
            host=trialstreamer.config.POSTGRES_IP, password=trialstreamer.config.POSTGRES_PASS,
            port=trialstreamer.config.POSTGRES_PORT) as db:
             with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor, name="pico_mesh") as cur:
                 cur.execute(cov_select + params + cov_join)
-                print((cov_select + cov_join).as_string(cur))
+                log.debug((cov_select + cov_join).as_string(cur))
                 for i, row in enumerate(cur):
                     if retmode=='json-short':
                         out.append({"ti": row['ti'], "year": row['year'], "punchline_text": row['punchline_text'],
@@ -310,8 +310,6 @@ def picosearch(body):
                     elif retmode=='ris':
                         pass
                         # TODO MAKE RIS REASONABLE FOR ICTRP
-
-
 
     log.info('returning results')
     if retmode=='json-short':
@@ -404,8 +402,12 @@ def get_trial(uuid):
     return out
 
 
+def create_app():
+    app = connexion.FlaskApp(__name__, specification_dir='api/', port=trialstreamer.config.TS_PORT, server='gevent')
+    app.add_api('trialstreamer_api.yml')
+    CORS(app.app)
+    log.info(f'Trialstreamer API Ready! Listening on 0.0.0.0:{trialstreamer.config.TS_PORT}')
+    return app
 
-import connexion
-app = connexion.FlaskApp(__name__, specification_dir='api/', port=trialstreamer.config.TS_PORT, server='gevent')
-app.add_api('trialstreamer_api.yml')
-CORS(app.app)
+
+app = create_app()

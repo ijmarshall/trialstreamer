@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+
+  api:
+    image: trialstreamer-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: api
+    volumes:
+      - ./pubmed-data:/var/lib/deploy/pubmed-data
+    configs:
+      - source: ts-config
+        target: /var/lib/deploy/config.json
+    restart: unless-stopped
+    ports:
+      - 5000:5000
+
+  updates:
+    image: trialstreamer-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: cron
+    volumes:
+      - ./pubmed-data:/var/lib/deploy/pubmed-data
+    restart: unless-stopped
+    networks:
+      - robotreviewer_network
+
+configs:
+  ts-config:
+    file: ./trialstreamer/config.json
+
+networks:
+  robotreviewer_network:
+     external: true
+     name: robotreviewer_default

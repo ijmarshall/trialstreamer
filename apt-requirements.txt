@@ -6,3 +6,4 @@ unzip
 wget
 git
 sudo
+cron

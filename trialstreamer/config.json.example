@@ -2,17 +2,20 @@
     "trialstreamer": {
         "aws_key": "",
         "aws_secret": "",
-        "postgres_db": "trialstreamer",
-        "postgres_user": "trialstreamer",
-        "postgres_pass": "",
         "ictrp_retrieval_path": "/path/for/ictrp/data",
         "pubmed_local_data_path": "/path/for/pubmed/data",
         "pubmed_user_email": "user@example.com",
         "safety_test_parse": false,
+        "download_retry_attempts": 3,
         "mendeley_id": "",
         "mendeley_secret": "",
-        "robotreviewer_url": "http://localhost:5051/",
-        "api_keys": {"keys go here":
-                {"uid": 1}}
+        "api_keys": {
+            "this is an api key":{
+                "uid": 1
+            },
+            "this is another api key":{
+                "uid": 2
+            }
+        }
 	}
 }

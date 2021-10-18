@@ -1,0 +1,2 @@
+0 */3 * * * . /var/lib/deploy/cron.env && /var/lib/deploy/miniconda3/envs/trialstreamer/bin/python /var/lib/deploy/update.py --source=pubmed > /proc/1/fd/1 2>/proc/1/fd/2
+30 */3 * * * . /var/lib/deploy/cron.env && /var/lib/deploy/miniconda3/envs/trialstreamer/bin/python /var/lib/deploy/update.py --source=medrxiv > /proc/1/fd/1 2>/proc/1/fd/2

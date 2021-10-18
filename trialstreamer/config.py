@@ -5,7 +5,8 @@ TrialStreamer configuration file
 import os
 import json
 
-CONFIG_KEY = "TRIALSTREAMER";
+CONFIG_KEY = "TRIALSTREAMER"
+
 
 def merge_dicts(*dict_args):
     '''
