@@ -1,3 +1,4 @@
+
 #
 # database utilities
 #
@@ -16,60 +17,54 @@ def make_tables():
     """
     set up the database if it doesn't yet exist
     """
-    create_tables_command = ("""create table if not exists pubmed (
+    create_tables_command = (
+         """create table if not exists openalex (
             id serial primary key,
-            pmid varchar(16) unique,
-            pm_status varchar(32),
+            openalex text,
+            pmid text,
+            doi text,            
+            date timestamp,
             year integer,
             ti text,
             ab text,
-            pm_data jsonb,
-            ptyp_rct smallint,
-            indexing_method varchar(32),
+            authors text[],
+            journal text,
+            mesh text[],
+            volume text,
+            issue text,
+            first_page text,
+            last_page text,
+            is_retracted boolean,
+            article_type text,
+            article_type_scores jsonb,
             is_human boolean,
             is_rct_precise boolean,
             is_rct_balanced boolean,
             is_rct_sensitive boolean,
-            clf_type varchar(16),
-            clf_score real,
             clf_date timestamp,
-            score_cnn real,
-            score_svm real,
-            score_svm_cnn real,
-            score_cnn_ptyp real,
-            score_svm_ptyp real,
-            score_svm_cnn_ptyp real,
-            rct_probability real,
             updated_date timestamp,
-            source_filename varchar(256)
+            population text[],
+            interventions text[],
+            outcomes text[],
+            population_cuis jsonb,
+            interventions_cuis jsonb,
+            outcomes_cuis jsonb,
             );
 
-            create table if not exists pubmed_excludes (
+            create table if not exists openalex_excludes (
             id serial primary key,
-            pmid varchar(16) unique,
-            pm_status varchar(32),
-            year integer,
-            ptyp_rct smallint,
-            indexing_method varchar(32),
-            is_rct_precise boolean,
-            is_rct_balanced boolean,
-            is_rct_sensitive boolean,
-            clf_type varchar(16),
-            clf_score real,
+            openalex text,
+            date timestamp,
+            article_type_scores jsonb,
             clf_date timestamp,
-            score_cnn real,
-            score_svm real,
-            score_svm_cnn real,
-            score_cnn_ptyp real,
-            score_svm_ptyp real,
-            score_svm_cnn_ptyp real,
-            rct_probability real,
             source_filename varchar(256)
             );
 
-create unique index if not exists pubmed_pmid on pubmed (pmid);
-create unique index if not exists pubmed_id on pubmed (id);
+create index if not exists idx_openalex_pmid on openalex (pmid);
 
+create index if not exists idx_openalex_population_cuis on pubmed_annotations using gin(population_cuis jsonb_path_ops);
+create index if not exists idx_openalex_interventions_cuis on pubmed_annotations using gin(interventions_cuis jsonb_path_ops);
+create index if not exists idx_openalex_outcomes_cuis on pubmed_annotations using gin(outcomes_cuis jsonb_path_ops);
 
 create table if not exists pubmed_annotations (
     id serial primary key,
