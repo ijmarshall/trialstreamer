@@ -49,7 +49,7 @@ docker network create robotreviewer_default
 docker-compose -f docker-compose.dev.yml up --build -d
 ```
 
-The development mode allows reloading the app when changes are detected, but the update script is not run automatically. 
+The development mode exposes the port 5000 and allows reloading the app when changes are detected, but the update script is not run automatically. 
 However, the update script can be ran directly in the API docker container if necessary using the following command: 
 
 ```

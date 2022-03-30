@@ -223,7 +223,7 @@ def download_md5s(gz_fns, updates=False):
         attempt = 0
         while attempt <= max_retry_attempts:
             try:
-                log.info(f'Downloading {out_filename+".md5"}... ')                                
+                log.info(f'Downloading {out_filename+".md5"}... ')
                 with open(out_filename + ".md5", 'wb') as f:
                     ftp.retrbinary('RETR ' + gz_fn + ".md5", f.write)
                 break
@@ -232,7 +232,7 @@ def download_md5s(gz_fns, updates=False):
                 log.info(f'Failed, retrying download ({attempt})...')
                 # Delete corrupted file
                 if os.path.exists(out_filename + ".md5"):
-                    os.remove(out_filename + ".md5")                
+                    os.remove(out_filename + ".md5")
 
 
 def download_and_validate_gzs(gz_fns, updates=False):
@@ -549,7 +549,8 @@ def upload_to_postgres(ftp_fns, safety_test_parse, batch_size=5000, force_update
 
     log.info(str(stats))
     dbutil.db.commit()
-
+    if len(stats) == 0:
+        log.info("There are no new Pubmed updates for now.")
 
 # def meshify_pico():
 #     """
@@ -592,7 +593,8 @@ def annotate_rcts(force_refresh=False, limit_to='is_rct_balanced', batch_size=10
     log.info('Fetching data to annotate')
     cur.execute("SELECT pmid, ti, ab FROM pubmed WHERE {}=true;".format(limit_to))
     records = cur.fetchall()
-
+    print(f'{len(records)} pubmed articles found')
+    print(f'{len(already_done_picos)} already_done_picos')
     log.info('PICO annotation in progress')
 
     for r in tqdm.tqdm(grouper(records, batch_size), desc='100s articles annotated'):

@@ -22,23 +22,23 @@ if __name__ == "__main__":
 
     if not args.source:
         print("Missing --source argument")
-        parser.print_help()    
+        parser.print_help()
     elif args.source == 'pubmed':
-            print("Downloading any updates from PubMed")
-            pubmed.download_ftp_updates()
-            print("Annotating using RobotReviewer")
-            pubmed.annotate_rcts()
-            print("Updating counts")
-            pubmed.update_counts()
-            print("Updating logs")
-            log_update(update_type="fullcheck", download_date=datetime.datetime.utcnow())
-            print("Done! :)")
+        print("Downloading any updates from PubMed")
+        pubmed.download_ftp_updates()
+        print("Annotating using RobotReviewer")
+        pubmed.annotate_rcts()
+        print("Updating counts")
+        pubmed.update_counts()
+        print("Updating logs")
+        log_update(update_type="fullcheck", download_date=datetime.datetime.utcnow())
+        print("Done! :)")
     elif args.source == 'medrxiv':
-            print("Updating MedRxiv COVID-19 articles")
-            from trialstreamer import medrxiv_cov
-            medrxiv_cov.update()
-            print("Updating logs")
-            log_update(update_type="medrxiv", download_date=datetime.datetime.utcnow())
+        print("Updating MedRxiv COVID-19 articles")
+        from trialstreamer import medrxiv_cov
+        medrxiv_cov.update()
+        print("Updating logs")
+        log_update(update_type="medrxiv", download_date=datetime.datetime.utcnow())
     else:
-        print("Invalid --source argument")
-        parser.print_help()        
+        print("Invalid --source argument, must be one of the following: (pubmed|medrxiv)")
+        parser.print_help()
