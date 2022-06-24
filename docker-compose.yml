@@ -16,8 +16,6 @@ services:
       - source: ts-config
         target: /var/lib/deploy/config.json
     restart: unless-stopped
-    ports:
-      - 5000:5000
 
   updates:
     image: trialstreamer-api
